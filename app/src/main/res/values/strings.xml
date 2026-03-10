@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">StarCompass</string>
+    <string name="nav_ar">AR Sky</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_tonight">Tonight</string>
+    <string name="nav_settings">Settings</string>
+    <string name="search_hint">Search stars, planets...</string>
+    <string name="point_phone">Point your phone at the sky</string>
+
+    <string name="fab_content_description">Action button</string>
+    <string name="image_view_item_transform_content_description">Transform image</string>
+    <string name="nav_header_desc">Navigation header</string>
+    <string name="nav_header_title">StarCompass</string>
+    <string name="nav_header_subtitle">starcompass@example.com</string>
+
+    <string name="menu_transform">Transform</string>
+    <string name="menu_reflow">Reflow</string>
+    <string name="menu_slideshow">Slideshow</string>
+    <string name="menu_settings">Settings</string>
+</resources>

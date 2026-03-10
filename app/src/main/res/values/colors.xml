@@ -1,0 +1,9 @@
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="night_sky">#FF0A0A1A</color>
+    <color name="star_white">#FFFFFFFF</color>
+    <color name="accent_blue">#FF2196F3</color>
+    <color name="accent_teal">#FF03DAC6</color>
+    <color name="horizon_gradient_start">#FF1A1A2E</color>
+    <color name="horizon_gradient_end">#FF16213E</color>
+</resources>
