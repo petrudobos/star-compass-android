@@ -1,18 +1,23 @@
 package com.example.astra
 
+import android.content.Intent
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.net.Uri
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import com.example.core.AstronomyUtils
-import com.example.core.HorizonCoords
 import com.example.data.Star
+import java.util.Locale
 import kotlin.math.*
 
 @Composable
@@ -20,14 +25,32 @@ fun SkyCanvas(
     rotationMatrix: FloatArray,
     stars: List<Star>,
     lat: Double,
-    lon: Double
+    lon: Double,
+    isDarkMode: Boolean
 ) {
     val context = LocalContext.current
     val lst = AstronomyUtils.calculateLST(lon)
     val sunPos = AstronomyUtils.calculateSunPosition()
 
+    val constellationLabels = remember { mutableStateListOf<ConstellationLabel>() }
+
     Canvas(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    constellationLabels.forEach { label ->
+                        if (offset.x in (label.x - 100f)..(label.x + 100f) &&
+                            offset.y in (label.y - 50f)..(label.y + 50f)
+                        ) {
+                            val lang = Locale.getDefault().language
+                            val url = "https://$lang.wikipedia.org/wiki/${label.name.replace(" ", "_")}"
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            context.startActivity(intent)
+                        }
+                    }
+                }
+            }
     ) {
         val width = size.width
         val height = size.height
@@ -41,16 +64,17 @@ fun SkyCanvas(
         val scaleX = width / fovX
         val scaleY = height / fovY
 
-        // Helper for drawing landscape-oriented text below a point
-        fun drawLandscapeText(text: String, x: Float, y: Float, paint: Paint) {
-            drawContext.canvas.nativeCanvas.save()
-            // Rotate 90 degrees if the app is in portrait but we want landscape readability
-            // However, usually "landscape mode" means the text is horizontal when the phone is held sideways.
-            // If the activity is portrait, rotating -90 or 90 makes it readable in landscape.
-            // Assuming the user wants it readable when the phone is held horizontally:
-            drawContext.canvas.nativeCanvas.rotate(-90f, x, y)
-            drawContext.canvas.nativeCanvas.drawText(text, x, y + 40f, paint) // 40f below
-            drawContext.canvas.nativeCanvas.restore()
+        if (isDarkMode) {
+            drawRect(color = Color.Black.copy(alpha = 0.7f))
+        }
+
+        fun drawLandscapeText(text: String, x: Float, y: Float, paint: Paint, offsetBelow: Float = 40f) {
+            drawIntoCanvas { canvas ->
+                canvas.nativeCanvas.save()
+                canvas.nativeCanvas.rotate(90f, x, y)
+                canvas.nativeCanvas.drawText(text, x, y + offsetBelow, paint)
+                canvas.nativeCanvas.restore()
+            }
         }
 
         // Draw Sun
@@ -59,19 +83,20 @@ fun SkyCanvas(
         if (sunScreenPos != null) {
             drawCircle(
                 color = Color.Yellow,
-                radius = 20f,
+                radius = 30f,
                 center = sunScreenPos
             )
             drawLandscapeText(
                 "SUN",
                 sunScreenPos.x,
-                sunScreenPos.y + 25f,
+                sunScreenPos.y,
                 Paint().apply {
                     color = android.graphics.Color.YELLOW
-                    textSize = 40f
+                    textSize = 50f
                     textAlign = Paint.Align.CENTER
                     typeface = Typeface.DEFAULT_BOLD
-                }
+                },
+                offsetBelow = 60f
             )
         }
 
@@ -94,7 +119,7 @@ fun SkyCanvas(
             }
         }
 
-        // Draw Stars and Labels
+        // Draw Stars
         stars.forEach { star ->
             val horizon = AstronomyUtils.toHorizon(star.ra, star.dec, lat, lon, lst)
             val screenPos = projectToScreen(horizon.az, horizon.alt, rotationMatrix, centerX, centerY, scaleX, scaleY)
@@ -109,27 +134,44 @@ fun SkyCanvas(
                     center = screenPos
                 )
 
-                // Increased magnitude threshold to 4.0 to include Megrez (3.3) and others
                 if (star.magnitude < 4.0f && star.commonName != null) {
                     drawLandscapeText(
                         star.commonName!!,
                         screenPos.x,
-                        screenPos.y + starSize + 10f,
+                        screenPos.y,
                         Paint().apply {
                             color = android.graphics.Color.WHITE
                             textSize = 30f
                             textAlign = Paint.Align.CENTER
                             alpha = (starAlpha * 255).toInt()
-                        }
+                        },
+                        offsetBelow = starSize + 20f
                     )
                 }
             }
         }
 
-        // Draw Constellation Lines
-        drawConstellations(stars, lat, lon, lst, rotationMatrix, centerX, centerY, scaleX, scaleY)
+        constellationLabels.clear()
+        drawConstellations(stars, lat, lon, lst, rotationMatrix, centerX, centerY, scaleX, scaleY) { name, x, y ->
+            constellationLabels.add(ConstellationLabel(name, x, y))
+            drawLandscapeText(
+                name.uppercase(),
+                x,
+                y,
+                Paint().apply {
+                    color = android.graphics.Color.CYAN
+                    textSize = 45f
+                    textAlign = Paint.Align.CENTER
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+                    alpha = 180
+                },
+                offsetBelow = 0f
+            )
+        }
     }
 }
+
+data class ConstellationLabel(val name: String, val x: Float, val y: Float)
 
 fun projectToScreen(
     az: Double,
@@ -143,14 +185,18 @@ fun projectToScreen(
     val altRad = Math.toRadians(alt)
     val azRad = Math.toRadians(az)
     
-    val worldX = cos(altRad) * sin(azRad)
-    val worldY = sin(altRad)
-    val worldZ = cos(altRad) * cos(azRad)
+    // Convert to Cartesian World Coordinates (East, Up, North)
+    val worldX = cos(altRad) * sin(azRad) // East
+    val worldY = sin(altRad)              // Up
+    val worldZ = cos(altRad) * cos(azRad) // North
 
-    val screenX_vec = rotationMatrix[0] * worldX + rotationMatrix[1] * worldY + rotationMatrix[2] * worldZ
-    val screenY_vec = rotationMatrix[4] * worldX + rotationMatrix[5] * worldY + rotationMatrix[6] * worldZ
-    val screenZ_vec = rotationMatrix[8] * worldX + rotationMatrix[9] * worldY + rotationMatrix[10] * worldZ
+    // Matrix multiplication: Screen = Matrix * World
+    // Standard Column-Major indices for Row 0, 1, 2
+    val screenX_vec = rotationMatrix[0] * worldX + rotationMatrix[4] * worldY + rotationMatrix[8] * worldZ
+    val screenY_vec = rotationMatrix[1] * worldX + rotationMatrix[5] * worldY + rotationMatrix[9] * worldZ
+    val screenZ_vec = rotationMatrix[2] * worldX + rotationMatrix[6] * worldY + rotationMatrix[10] * worldZ
 
+    // If screenZ_vec > 0, the object is in front of the camera
     if (screenZ_vec > 0) {
         val screenX = centerX + (screenX_vec / screenZ_vec).toFloat() * scaleX * 50f
         val screenY = centerY - (screenY_vec / screenZ_vec).toFloat() * scaleY * 50f
@@ -168,53 +214,56 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawConstellations(
     centerX: Float,
     centerY: Float,
     scaleX: Float,
-    scaleY: Float
+    scaleY: Float,
+    onLabelReady: (String, Float, Float) -> Unit
 ) {
-    val connections = mutableListOf<Pair<String, String>>()
-    
-    // Ursa Major (Big Dipper)
-    connections.addAll(listOf(
-        "Dubhe" to "Merak", "Merak" to "Phecda", "Phecda" to "Megrez",
-        "Megrez" to "Alioth", "Alioth" to "Mizar", "Mizar" to "Alkaid", "Megrez" to "Dubhe"
-    ))
+    val constellationGroups = listOf(
+        "Ursa Major" to listOf(
+            "Dubhe" to "Merak", "Merak" to "Phecda", "Phecda" to "Megrez",
+            "Megrez" to "Alioth", "Alioth" to "Mizar", "Mizar" to "Alkaid", "Megrez" to "Dubhe"
+        ),
+        "Cassiopeia" to listOf(
+            "Caph" to "Schedar", "Schedar" to "Tsih", "Tsih" to "Ruchbah", "Ruchbah" to "Segin"
+        ),
+        "Orion" to listOf(
+            "Betelgeuse" to "Bellatrix", "Bellatrix" to "Rigel", "Rigel" to "Saiph", "Saiph" to "Betelgeuse",
+            "Alnitak" to "Alnilam", "Alnilam" to "Mintaka"
+        ),
+        "Crux" to listOf(
+            "Gacrux" to "Acrux", "Mimosa" to "Imai"
+        ),
+        "Leo" to listOf(
+            "Regulus" to "Algieba", "Algieba" to "Zosma", "Zosma" to "Denebola", "Denebola" to "Regulus"
+        )
+    )
 
-    // Cassiopeia (W shape)
-    connections.addAll(listOf(
-        "Caph" to "Schedar", "Schedar" to "Tsih", "Tsih" to "Ruchbah", "Ruchbah" to "Segin"
-    ))
-
-    // Orion
-    connections.addAll(listOf(
-        "Betelgeuse" to "Bellatrix", "Bellatrix" to "Rigel", "Rigel" to "Saiph", "Saiph" to "Betelgeuse",
-        "Alnitak" to "Alnilam", "Alnilam" to "Mintaka" // Belt
-    ))
-
-    // Crux (Southern Cross)
-    connections.addAll(listOf(
-        "Gacrux" to "Acrux", "Mimosa" to "Imai"
-    ))
-
-    // Leo
-    connections.addAll(listOf(
-        "Regulus" to "Algieba", "Algieba" to "Zosma", "Zosma" to "Denebola", "Denebola" to "Regulus"
-    ))
-
-    connections.forEach { (s1, s2) ->
-        val star1 = stars.find { it.commonName == s1 }
-        val star2 = stars.find { it.commonName == s2 }
-        if (star1 != null && star2 != null) {
-            val h1 = AstronomyUtils.toHorizon(star1.ra, star1.dec, lat, lon, lst)
-            val h2 = AstronomyUtils.toHorizon(star2.ra, star2.dec, lat, lon, lst)
-            val p1 = projectToScreen(h1.az, h1.alt, rotationMatrix, centerX, centerY, scaleX, scaleY)
-            val p2 = projectToScreen(h2.az, h2.alt, rotationMatrix, centerX, centerY, scaleX, scaleY)
-            if (p1 != null && p2 != null) {
-                drawLine(
-                    color = Color.Cyan.copy(alpha = 0.4f),
-                    start = p1,
-                    end = p2,
-                    strokeWidth = 2f
-                )
+    constellationGroups.forEach { (name, connections) ->
+        val points = mutableListOf<Offset>()
+        connections.forEach { (s1, s2) ->
+            val star1 = stars.find { it.commonName == s1 }
+            val star2 = stars.find { it.commonName == s2 }
+            if (star1 != null && star2 != null) {
+                val h1 = AstronomyUtils.toHorizon(star1.ra, star1.dec, lat, lon, lst)
+                val h2 = AstronomyUtils.toHorizon(star2.ra, star2.dec, lat, lon, lst)
+                val p1 = projectToScreen(h1.az, h1.alt, rotationMatrix, centerX, centerY, scaleX, scaleY)
+                val p2 = projectToScreen(h2.az, h2.alt, rotationMatrix, centerX, centerY, scaleX, scaleY)
+                if (p1 != null && p2 != null) {
+                    drawLine(
+                        color = Color.Cyan.copy(alpha = 0.4f),
+                        start = p1,
+                        end = p2,
+                        strokeWidth = 2f
+                    )
+                    points.add(p1)
+                    points.add(p2)
+                }
             }
+        }
+        
+        if (points.isNotEmpty()) {
+            val avgX = points.map { it.x }.average().toFloat()
+            val avgY = points.map { it.y }.average().toFloat()
+            onLabelReady(name, avgX, avgY)
         }
     }
 }

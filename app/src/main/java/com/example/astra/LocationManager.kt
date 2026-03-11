@@ -23,11 +23,11 @@ class LocationManager(context: Context, private val errorTracker: ErrorTracker? 
                 .addOnSuccessListener { loc ->
                     if (loc != null) {
                         _location.value = loc
-                    } else {
-                        errorTracker?.reportError(AppError.LocationError("Location is null. Is GPS enabled?"))
                     }
+                    // Removed "Location is null" error to avoid startup annoyance
                 }
                 .addOnFailureListener { e ->
+                    // Only report if it's not a simple lack of fix
                     errorTracker?.reportError(AppError.LocationError(e.message ?: "Unknown location error"))
                 }
         } catch (e: Exception) {
