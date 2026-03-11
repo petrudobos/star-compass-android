@@ -17,12 +17,20 @@ import kotlin.math.sin
 
 /**
  * Orientation manager using GEOMAGNETIC_ROTATION_VECTOR sensor with proper
- * 90-degree rotation compensation for landscape mode (USB on right).
+ * landscape mode (USB on right) coordinate system transformation.
  * 
- * Key insight: In landscape mode with USB on right, the device's physical X-axis
- * points UP on screen, and the physical Y-axis points LEFT on screen.
- * We need to rotate the geomagnetic coordinate system 90° clockwise to align
- * with the screen coordinate system for accurate compass-to-screen mapping.
+ * Key insight for landscape (USB on right):
+ * - Device's physical X-axis (right in portrait) points UP on screen
+ * - Device's physical Y-axis (up in portrait) points LEFT on screen
+ * - Device's physical Z-axis (out in portrait) points OUT of screen
+ * 
+ * Geomagnetic coordinate system:
+ * - X points East
+ * - Y points North  
+ * - Z points Up (to sky)
+ * 
+ * For accurate compass tracking, we need to properly remap the geomagnetic
+ * readings to match the device's physical orientation in landscape mode.
  */
 class OrientationManager(
     val context: Context,
@@ -90,7 +98,7 @@ class OrientationManager(
             }
         }
 
-        // Get base rotation matrix from sensor
+        // Get base rotation matrix from sensor (device-relative coordinates)
         val sensorMatrix = FloatArray(16)
         SensorManager.getRotationMatrixFromVector(sensorMatrix, lastRotationVector)
 
@@ -110,17 +118,22 @@ class OrientationManager(
         val remappedMatrix = FloatArray(16)
         when (rotation) {
             Surface.ROTATION_90 -> {
-                // Landscape: USB on right
-                // This is our target orientation
-                // Device X-axis (right when portrait) now points UP on screen
-                // Device Y-axis (up when portrait) now points LEFT on screen
-                // We need to remap so that:
-                // - World North maps correctly to screen left/right movement
-                // - World Up maps correctly to screen up/down movement
+                // Landscape: USB on right (our primary mode)
+                // In this orientation:
+                // - Device X (right in portrait) -> screen UP
+                // - Device Y (up in portrait) -> screen LEFT  
+                // - Device Z (out in portrait) -> screen OUT
+                //
+                // We want:
+                // - World X-axis (screen right) to align with East
+                // - World Y-axis (screen up) to align with Zenith
+                // - World Z-axis (screen forward) to align with North
+                //
+                // Correct remapping for landscape (USB right):
                 SensorManager.remapCoordinateSystem(
                     sensorMatrix,
-                    SensorManager.AXIS_Y,        // Old Y (North in portrait) becomes new X
-                    SensorManager.AXIS_MINUS_X,  // Old -X (West in portrait) becomes new Y
+                    SensorManager.AXIS_Y,         // Device Y -> new X (screen right)
+                    SensorManager.AXIS_MINUS_X,   // Device -X -> new Y (screen up)
                     remappedMatrix
                 )
             }
@@ -148,45 +161,43 @@ class OrientationManager(
             }
         }
 
-        // The remappedMatrix now represents device-to-world transformation
-        // For landscape (ROTATION_90), the matrix columns are:
-        // Column 0: Direction that device's screen-right points to in world space
-        // Column 1: Direction that device's screen-up points to in world space  
-        // Column 2: Direction that device's screen-forward points to in world space
-        
-        // Our sky canvas coordinate system:
-        // X-axis = East
-        // Y-axis = Up (zenith)
-        // Z-axis = North
-        
-        // We want a matrix that transforms world coordinates to screen coordinates
-        // The columns should represent where world axes appear on screen
+        // The remappedMatrix now represents device orientation relative to world
+        // In the world coordinate system (geomagnetic):
+        // - Column 0 (index 0,4,8): where device's +X axis points in world space
+        // - Column 1 (index 1,5,9): where device's +Y axis points in world space  
+        // - Column 2 (index 2,6,10): where device's +Z axis points in world space
+        //
+        // For rendering, we need the inverse transformation:
+        // Our rendering coordinate system:
+        // - X-axis = screen horizontal (East positive)
+        // - Y-axis = screen vertical (Up/Zenith positive)
+        // - Z-axis = screen depth (North positive, into screen)
         
         val finalMatrix = FloatArray(16)
         
-        // Extract the basis vectors from remapped matrix
-        // These tell us where world directions point in device space
+        // Build camera/view matrix for star rendering
+        // We need to transpose/invert the rotation part to get world-to-camera transform
+        // Since rotation matrices are orthogonal, transpose = inverse for rotation part
         
-        // For our rendering:
-        // Column 0: Where East points in screen coordinates
-        finalMatrix[0] = remappedMatrix[0]   // East -> Screen X component
-        finalMatrix[1] = remappedMatrix[4]   // East -> Screen Y component  
-        finalMatrix[2] = remappedMatrix[8]   // East -> Screen Z component
+        // Row 0: Camera right direction (where screen-right points in world)
+        finalMatrix[0] = remappedMatrix[0]   // X component
+        finalMatrix[1] = remappedMatrix[4]   // Y component
+        finalMatrix[2] = remappedMatrix[8]   // Z component
         finalMatrix[3] = 0f
         
-        // Column 1: Where Up points in screen coordinates
-        finalMatrix[4] = remappedMatrix[2]   // Up -> Screen X component
-        finalMatrix[5] = remappedMatrix[6]   // Up -> Screen Y component
-        finalMatrix[6] = remappedMatrix[10]  // Up -> Screen Z component
+        // Row 1: Camera up direction (where screen-up points in world)
+        finalMatrix[4] = remappedMatrix[1]   // X component
+        finalMatrix[5] = remappedMatrix[5]   // Y component
+        finalMatrix[6] = remappedMatrix[9]   // Z component
         finalMatrix[7] = 0f
         
-        // Column 2: Where North points in screen coordinates
-        finalMatrix[8] = remappedMatrix[1]   // North -> Screen X component
-        finalMatrix[9] = remappedMatrix[5]   // North -> Screen Y component
-        finalMatrix[10] = remappedMatrix[9]  // North -> Screen Z component
+        // Row 2: Camera forward direction (where screen-forward/into points in world)
+        finalMatrix[8] = remappedMatrix[2]   // X component
+        finalMatrix[9] = remappedMatrix[6]   // Y component
+        finalMatrix[10] = remappedMatrix[10] // Z component
         finalMatrix[11] = 0f
         
-        // No translation
+        // Translation (no offset)
         finalMatrix[12] = 0f
         finalMatrix[13] = 0f
         finalMatrix[14] = 0f
