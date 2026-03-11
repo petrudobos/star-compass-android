@@ -413,7 +413,9 @@ class MainActivity : ComponentActivity() {
             },
             text = {
                 Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    modifier = Modifier
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
@@ -478,7 +480,9 @@ class MainActivity : ComponentActivity() {
             },
             text = {
                 Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    modifier = Modifier
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     InstructionStep("1", "Point phone at North (use a compass app to verify)")
@@ -526,14 +530,16 @@ class MainActivity : ComponentActivity() {
             },
             title = { 
                 Text(
-                    "🧭 Understanding Compass Issues on Android",
+                    "🧭 Understanding Compass Issues",
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 ) 
             },
             text = {
                 Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    modifier = Modifier
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
