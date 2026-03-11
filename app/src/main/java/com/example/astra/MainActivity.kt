@@ -100,6 +100,9 @@ class MainActivity : ComponentActivity() {
             var isDarkMode by remember { mutableStateOf(false) }
             var showSnapshotInfo by remember { mutableStateOf(false) }
             var showFilterInfo by remember { mutableStateOf(false) }
+            var showCalibrateInfo by remember { mutableStateOf(false) }
+            var showARTestInfo by remember { mutableStateOf(false) }
+            var showCompassIssuesInfo by remember { mutableStateOf(false) }
             
             var showCalibrationDialogState by remember { mutableStateOf(showCalibrationDialog) }
             var showARTestDialog by remember { mutableStateOf(false) }
@@ -133,76 +136,73 @@ class MainActivity : ComponentActivity() {
                     isDarkMode = isDarkMode
                 )
 
-                // Helper Buttons - TOP CENTER of screen (Landscape orientation)
+                // Helper Buttons - TOP CENTER with info bubbles
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    // Calibration Helper Button
-                    SmallActionButton(
+                    // Calibration Helper
+                    HelperButtonGroup(
+                        showInfo = showCalibrateInfo,
+                        onToggleInfo = { showCalibrateInfo = !showCalibrateInfo },
+                        infoText = "Opens compass calibration guide. Critical for accurate star positioning.",
                         icon = Icons.Default.Explore,
-                        contentDescription = "Calibrate Compass",
-                        onClick = { showCalibrationDialogState = true },
-                        containerColor = MaterialTheme.colorScheme.primary
+                        onAction = { showCalibrationDialogState = true },
+                        buttonColor = MaterialTheme.colorScheme.primary
                     )
 
-                    // AR Test Helper Button
-                    SmallActionButton(
+                    // AR Test Helper
+                    HelperButtonGroup(
+                        showInfo = showARTestInfo,
+                        onToggleInfo = { showARTestInfo = !showARTestInfo },
+                        infoText = "Shows how to verify that stars align correctly with real sky positions.",
                         icon = Icons.Default.Navigation,
-                        contentDescription = "Test AR Alignment",
-                        onClick = { showARTestDialog = true },
-                        containerColor = MaterialTheme.colorScheme.tertiary
+                        onAction = { showARTestDialog = true },
+                        buttonColor = MaterialTheme.colorScheme.tertiary
                     )
 
-                    // Compass Issues Helper Button
-                    SmallActionButton(
+                    // Compass Issues Helper
+                    HelperButtonGroup(
+                        showInfo = showCompassIssuesInfo,
+                        onToggleInfo = { showCompassIssuesInfo = !showCompassIssuesInfo },
+                        infoText = "Explains common compass issues: magnetic interference, calibration needs.",
                         icon = Icons.Default.Warning,
-                        contentDescription = "Compass Issues",
-                        onClick = { showCompassIssuesDialog = true },
-                        containerColor = MaterialTheme.colorScheme.error
+                        onAction = { showCompassIssuesDialog = true },
+                        buttonColor = MaterialTheme.colorScheme.error
                     )
                 }
 
-                // UI Controls - RIGHT SIDE (USB port on right)
+                // UI Controls - RIGHT SIDE with info bubbles
                 Column(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .padding(end = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                        .padding(end = 20.dp)
+                        .width(IntrinsicSize.Max),
+                    verticalArrangement = Arrangement.spacedBy(24.dp),
                     horizontalAlignment = Alignment.End
                 ) {
-                    // Filter Button
-                    FloatingActionButton(
-                        onClick = { isDarkMode = !isDarkMode },
-                        containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f),
-                        shape = CircleShape,
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Brightness4,
-                            contentDescription = "Toggle Night Mode",
-                            modifier = Modifier.size(28.dp),
-                            tint = Color.White
-                        )
-                    }
+                    // Filter Group
+                    ActionGroup(
+                        showInfo = showFilterInfo,
+                        onToggleInfo = { showFilterInfo = !showFilterInfo },
+                        infoText = "Toggles between camera view and dark background for better star visibility.",
+                        icon = Icons.Default.Brightness4,
+                        onAction = { isDarkMode = !isDarkMode },
+                        fabColor = MaterialTheme.colorScheme.secondary
+                    )
 
-                    // Snapshot Button
-                    FloatingActionButton(
-                        onClick = { captureAndSaveScreenshot(view) },
-                        containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f),
-                        shape = CircleShape,
-                        modifier = Modifier.size(56.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CameraAlt,
-                            contentDescription = "Take Snapshot",
-                            modifier = Modifier.size(28.dp),
-                            tint = Color.White
-                        )
-                    }
+                    // Snapshot Group
+                    ActionGroup(
+                        showInfo = showSnapshotInfo,
+                        onToggleInfo = { showSnapshotInfo = !showSnapshotInfo },
+                        infoText = "Captures current view (camera + stars) to Pictures/StarCompass folder.",
+                        icon = Icons.Default.CameraAlt,
+                        onAction = { captureAndSaveScreenshot(view) },
+                        fabColor = MaterialTheme.colorScheme.tertiary
+                    )
                 }
 
                 // Dialogs
@@ -274,24 +274,117 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun SmallActionButton(
+    fun HelperButtonGroup(
+        showInfo: Boolean,
+        onToggleInfo: () -> Unit,
+        infoText: String,
         icon: androidx.compose.ui.graphics.vector.ImageVector,
-        contentDescription: String,
-        onClick: () -> Unit,
-        containerColor: Color
+        onAction: () -> Unit,
+        buttonColor: Color
     ) {
-        FloatingActionButton(
-            onClick = onClick,
-            containerColor = containerColor.copy(alpha = 0.85f),
-            shape = CircleShape,
-            modifier = Modifier.size(48.dp)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(24.dp),
-                tint = Color.White
-            )
+            // Info bubble above button
+            if (showInfo) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .widthIn(max = 180.dp)
+                        .clickable { onToggleInfo() }
+                ) {
+                    Text(
+                        text = infoText,
+                        modifier = Modifier.padding(10.dp),
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Button with info icon
+            Box {
+                FloatingActionButton(
+                    onClick = onAction,
+                    containerColor = buttonColor.copy(alpha = 0.85f),
+                    shape = CircleShape,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = Color.White
+                    )
+                }
+
+                // Small info button overlay
+                IconButton(
+                    onClick = onToggleInfo,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .align(Alignment.BottomEnd)
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = "Info",
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun ActionGroup(
+        showInfo: Boolean,
+        onToggleInfo: () -> Unit,
+        infoText: String,
+        icon: androidx.compose.ui.graphics.vector.ImageVector,
+        onAction: () -> Unit,
+        fabColor: Color
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End
+        ) {
+            if (showInfo) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .padding(end = 12.dp)
+                        .widthIn(max = 220.dp)
+                        .clickable { onToggleInfo() }
+                ) {
+                    Text(
+                        text = infoText,
+                        modifier = Modifier.padding(12.dp),
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            IconButton(onClick = onToggleInfo) {
+                Icon(Icons.Default.Info, contentDescription = "Info", tint = Color.White)
+            }
+
+            FloatingActionButton(
+                onClick = onAction,
+                containerColor = fabColor.copy(alpha = 0.9f),
+                shape = CircleShape,
+                modifier = Modifier.size(56.dp)
+            ) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(28.dp))
+            }
         }
     }
 
