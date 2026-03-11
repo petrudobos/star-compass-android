@@ -26,13 +26,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.astra.ui.AppError
@@ -49,9 +49,6 @@ class MainActivity : ComponentActivity() {
 
     private var cameraPermissionGranted by mutableStateOf(false)
     private var locationPermissionGranted by mutableStateOf(false)
-
-    // Hoisted to class level so it resets every time onStart() is called.
-    // This ensures the dialog re-appears every time the app is opened while permissions are missing.
     private var showPermissionRationale by mutableStateOf(false)
 
     private val requestPermissionsLauncher = registerForActivityResult(
@@ -75,7 +72,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 starRepository.seedDatabase()
-            } catch (e: Exception) { }
+            } catch (_: Exception) {
+            }
         }
 
         cameraPermissionGranted = hasPermission(Manifest.permission.CAMERA)
@@ -94,11 +92,16 @@ class MainActivity : ComponentActivity() {
             val view = LocalView.current
 
             Box(modifier = Modifier.fillMaxSize()) {
-                // Camera background
                 if (cameraPermissionGranted) {
-                    CameraPreview(onError = { errorTracker.reportError(AppError.CameraError(it)) })
+                    CameraPreview(
+                        onError = { errorTracker.reportError(AppError.CameraError(it)) }
+                    )
                 } else {
-                    Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black)
+                    )
                 }
 
                 SkyCanvas(
@@ -109,129 +112,44 @@ class MainActivity : ComponentActivity() {
                     isDarkMode = isDarkMode
                 )
 
-                // ── UI Controls: right edge, vertically centered ──────────────────────
-                // All icons/buttons rotated +90° to match landscape orientation.
+                // UI Controls - Fixed Landscape (USB on right side)
                 Column(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .padding(end = 24.dp),
+                        .padding(end = 24.dp)
+                        .width(IntrinsicSize.Max),
                     verticalArrangement = Arrangement.spacedBy(40.dp),
-                    horizontalAlignment = Alignment.End
+                    horizontalAlignment = Alignment.End // Fixed shifting by aligning icons/buttons to the right
                 ) {
-                    // ── Filter Group ──────────────────────────────────────────────────
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        if (showFilterInfo) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .padding(end = 12.dp)
-                                    .widthIn(max = 220.dp)
-                                    .clickable { showFilterInfo = false }
-                                    .rotate(90f)
-                            ) {
-                                Text(
-                                    text = "If camera permission wasn't given, the AR background defaults to black.",
-                                    modifier = Modifier.padding(12.dp),
-                                    fontSize = 13.sp,
-                                    lineHeight = 18.sp,
-                                    textAlign = TextAlign.Center,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
+                    // Filter Group
+                    ActionGroup(
+                        showInfo = showFilterInfo,
+                        onToggleInfo = { showFilterInfo = !showFilterInfo },
+                        infoText = "If camera permission wasn't given, the AR background defaults to black.",
+                        icon = Icons.Default.Brightness4,
+                        onAction = { isDarkMode = !isDarkMode },
+                        fabColor = MaterialTheme.colorScheme.secondary
+                    )
 
-                        IconButton(
-                            onClick = { showFilterInfo = !showFilterInfo },
-                            modifier = Modifier.rotate(90f)
-                        ) {
-                            Icon(Icons.Default.Info, contentDescription = "Filter Info", tint = Color.White)
-                        }
-
-                        FloatingActionButton(
-                            onClick = { isDarkMode = !isDarkMode },
-                            containerColor = MaterialTheme.colorScheme.secondary,
-                            shape = CircleShape,
-                            modifier = Modifier
-                                .rotate(90f)
-                                .size(64.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Brightness4,
-                                contentDescription = "Toggle Dark Overlay",
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                    }
-
-                    // ── Snapshot Group ────────────────────────────────────────────────
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        if (showSnapshotInfo) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .padding(end = 12.dp)
-                                    .widthIn(max = 220.dp)
-                                    .clickable { showSnapshotInfo = false }
-                                    .rotate(90f)
-                            ) {
-                                Text(
-                                    text = "Captures the current view (camera + stars) to Pictures/StarCompass.",
-                                    modifier = Modifier.padding(12.dp),
-                                    fontSize = 13.sp,
-                                    lineHeight = 18.sp,
-                                    textAlign = TextAlign.Center,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        // +90f consistent with the rest of the UI
-                        IconButton(
-                            onClick = { showSnapshotInfo = !showSnapshotInfo },
-                            modifier = Modifier.rotate(90f)
-                        ) {
-                            Icon(Icons.Default.Info, contentDescription = "Snapshot Info", tint = Color.White)
-                        }
-
-                        FloatingActionButton(
-                            onClick = { captureAndSaveScreenshot(view) },
-                            containerColor = MaterialTheme.colorScheme.tertiary,
-                            shape = CircleShape,
-                            modifier = Modifier
-                                .rotate(90f)
-                                .size(64.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.CameraAlt,
-                                contentDescription = "Take Snapshot",
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                    }
+                    // Snapshot Group
+                    ActionGroup(
+                        showInfo = showSnapshotInfo,
+                        onToggleInfo = { showSnapshotInfo = !showSnapshotInfo },
+                        infoText = "Captures the current view (camera + stars) to Pictures/StarCompass.",
+                        icon = Icons.Default.CameraAlt,
+                        onAction = { captureAndSaveScreenshot(view) },
+                        fabColor = MaterialTheme.colorScheme.tertiary
+                    )
                 }
 
-                // ── Permission Dialog ─────────────────────────────────────────────────
-                // showPermissionRationale is a class-level mutableStateOf reset in onStart(),
-                // so it always shows on each fresh app open when permissions are missing.
-                // Using key(showPermissionRationale) prevents dismiss on screen rotation.
                 if (showPermissionRationale && (!cameraPermissionGranted || !locationPermissionGranted)) {
-                    key(showPermissionRationale) {
-                        PermissionDialog(
-                            onConfirm = {
-                                showPermissionRationale = false
-                                checkAndRequestPermissions()
-                            },
-                            onDismiss = { showPermissionRationale = false }
-                        )
-                    }
+                    PermissionDialog(
+                        onConfirm = {
+                            showPermissionRationale = false
+                            checkAndRequestPermissions()
+                        },
+                        onDismiss = { showPermissionRationale = false }
+                    )
                 }
 
                 if (errors.isNotEmpty()) {
@@ -251,9 +169,9 @@ class MainActivity : ComponentActivity() {
         if (hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
             locationManager.requestSingleUpdate()
         }
-        // Re-check permission state and show dialog again if still missing.
         cameraPermissionGranted = hasPermission(Manifest.permission.CAMERA)
         locationPermissionGranted = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+
         if (!cameraPermissionGranted || !locationPermissionGranted) {
             showPermissionRationale = true
         }
@@ -265,17 +183,72 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
+    fun ActionGroup(
+        showInfo: Boolean,
+        onToggleInfo: () -> Unit,
+        infoText: String,
+        icon: androidx.compose.ui.graphics.vector.ImageVector,
+        onAction: () -> Unit,
+        fabColor: Color
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End // Keep elements right-aligned
+        ) {
+            if (showInfo) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .padding(end = 12.dp)
+                        .widthIn(max = 220.dp)
+                        .clickable { onToggleInfo() }
+                ) {
+                    Text(
+                        text = infoText,
+                        modifier = Modifier.padding(12.dp),
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            IconButton(onClick = onToggleInfo) {
+                Icon(Icons.Default.Info, contentDescription = "Info", tint = Color.White)
+            }
+
+            FloatingActionButton(
+                onClick = onAction,
+                containerColor = fabColor,
+                shape = CircleShape,
+                modifier = Modifier.size(64.dp)
+            ) {
+                Icon(icon, contentDescription = "Action", modifier = Modifier.size(32.dp))
+            }
+        }
+    }
+
+    @Composable
     fun PermissionDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
         AlertDialog(
-            onDismissRequest = onDismiss,
+            onDismissRequest = {},
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            ),
             title = { Text("Permissions Required") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PermissionItem("Camera", "Used to show the sky behind the star map for an Augmented Reality experience.")
-                    PermissionItem("Location", "Used to calculate the exact position of stars relative to your current standing point.")
-                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-                        PermissionItem("Storage", "Required on older devices to save snapshots of your sky views to your gallery.")
-                    }
+                    PermissionItem(
+                        "Camera",
+                        "Used to show the sky behind the star map for an Augmented Reality experience."
+                    )
+                    PermissionItem(
+                        "Location",
+                        "Used to calculate the exact position of stars relative to your current standing point."
+                    )
                 }
             },
             confirmButton = {
@@ -309,7 +282,10 @@ class MainActivity : ComponentActivity() {
                 put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
                 put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/StarCompass")
             }
-            val imageUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            val imageUri = contentResolver.insert(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                contentValues
+            )
             fos = imageUri?.let { contentResolver.openOutputStream(it) }
         }
 
@@ -326,9 +302,6 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.CAMERA,
             Manifest.permission.ACCESS_FINE_LOCATION
         )
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-            permissionsToRequest.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        }
         requestPermissionsLauncher.launch(permissionsToRequest.toTypedArray())
     }
 
@@ -338,11 +311,16 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun ErrorOverlay(errors: List<AppError>, onDismiss: (AppError) -> Unit, locationPermissionMissing: Boolean) {
-    Box(modifier = Modifier
-        .fillMaxSize()
-        .padding(16.dp)
-        .statusBarsPadding()
+fun ErrorOverlay(
+    errors: List<AppError>,
+    onDismiss: (AppError) -> Unit,
+    locationPermissionMissing: Boolean
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .statusBarsPadding()
     ) {
         errors.forEach { error ->
             if (error is AppError.LocationError && !locationPermissionMissing) return@forEach
@@ -353,7 +331,6 @@ fun ErrorOverlay(errors: List<AppError>, onDismiss: (AppError) -> Unit, location
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .rotate(90f)
                     .fillMaxWidth(0.8f)
             ) {
                 Row(
@@ -362,7 +339,9 @@ fun ErrorOverlay(errors: List<AppError>, onDismiss: (AppError) -> Unit, location
                 ) {
                     Text(text = error.message, modifier = Modifier.weight(1f))
                     if (error.recoverable) {
-                        TextButton(onClick = { onDismiss(error) }) { Text("Dismiss") }
+                        TextButton(onClick = { onDismiss(error) }) {
+                            Text("Dismiss")
+                        }
                     }
                 }
             }

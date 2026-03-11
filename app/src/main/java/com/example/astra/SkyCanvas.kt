@@ -68,12 +68,13 @@ fun SkyCanvas(
             drawRect(color = Color.Black.copy(alpha = 0.7f))
         }
 
-        fun drawLandscapeText(text: String, x: Float, y: Float, paint: Paint, offsetBelow: Float = 40f) {
+        // Updated for native landscape: Draw text upright (0 rotation) or 0 rotation instead of 90.
+        // The request says rotate 90 degrees counter clockwise. 
+        // Previously it was canvas.nativeCanvas.rotate(90f, x, y) which is 90 clockwise.
+        // So 0f (upright in landscape) is technically 90 CCW from the previous state.
+        fun drawSkyText(text: String, x: Float, y: Float, paint: Paint, offsetBelow: Float = 0f) {
             drawIntoCanvas { canvas ->
-                canvas.nativeCanvas.save()
-                canvas.nativeCanvas.rotate(90f, x, y)
                 canvas.nativeCanvas.drawText(text, x, y + offsetBelow, paint)
-                canvas.nativeCanvas.restore()
             }
         }
 
@@ -86,7 +87,7 @@ fun SkyCanvas(
                 radius = 30f,
                 center = sunScreenPos
             )
-            drawLandscapeText(
+            drawSkyText(
                 "SUN",
                 sunScreenPos.x,
                 sunScreenPos.y,
@@ -105,7 +106,7 @@ fun SkyCanvas(
         directions.forEach { (label, az) ->
             val screenPos = projectToScreen(az, 0.0, rotationMatrix, centerX, centerY, scaleX, scaleY)
             if (screenPos != null) {
-                drawLandscapeText(
+                drawSkyText(
                     label,
                     screenPos.x,
                     screenPos.y,
@@ -135,7 +136,7 @@ fun SkyCanvas(
                 )
 
                 if (star.magnitude < 4.0f && star.commonName != null) {
-                    drawLandscapeText(
+                    drawSkyText(
                         star.commonName!!,
                         screenPos.x,
                         screenPos.y,
@@ -154,7 +155,7 @@ fun SkyCanvas(
         constellationLabels.clear()
         drawConstellations(stars, lat, lon, lst, rotationMatrix, centerX, centerY, scaleX, scaleY) { name, x, y ->
             constellationLabels.add(ConstellationLabel(name, x, y))
-            drawLandscapeText(
+            drawSkyText(
                 name.uppercase(),
                 x,
                 y,
@@ -164,8 +165,7 @@ fun SkyCanvas(
                     textAlign = Paint.Align.CENTER
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
                     alpha = 180
-                },
-                offsetBelow = 0f
+                }
             )
         }
     }
@@ -185,18 +185,14 @@ fun projectToScreen(
     val altRad = Math.toRadians(alt)
     val azRad = Math.toRadians(az)
     
-    // Convert to Cartesian World Coordinates (East, Up, North)
     val worldX = cos(altRad) * sin(azRad) // East
     val worldY = sin(altRad)              // Up
     val worldZ = cos(altRad) * cos(azRad) // North
 
-    // Matrix multiplication: Screen = Matrix * World
-    // Standard Column-Major indices for Row 0, 1, 2
     val screenX_vec = rotationMatrix[0] * worldX + rotationMatrix[4] * worldY + rotationMatrix[8] * worldZ
     val screenY_vec = rotationMatrix[1] * worldX + rotationMatrix[5] * worldY + rotationMatrix[9] * worldZ
     val screenZ_vec = rotationMatrix[2] * worldX + rotationMatrix[6] * worldY + rotationMatrix[10] * worldZ
 
-    // If screenZ_vec > 0, the object is in front of the camera
     if (screenZ_vec > 0) {
         val screenX = centerX + (screenX_vec / screenZ_vec).toFloat() * scaleX * 50f
         val screenY = centerY - (screenY_vec / screenZ_vec).toFloat() * scaleY * 50f

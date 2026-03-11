@@ -25,7 +25,9 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:resizeableActivity="true"
+            android:resizeableActivity="false"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.SkyMapClone">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

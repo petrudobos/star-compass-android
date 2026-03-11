@@ -13,7 +13,11 @@ import com.example.astra.ui.ErrorTracker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class OrientationManager(val context: Context, private val errorTracker: ErrorTracker? = null) : SensorEventListener {
+class OrientationManager(
+    val context: Context,
+    private val errorTracker: ErrorTracker? = null
+) : SensorEventListener {
+
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -36,80 +40,84 @@ class OrientationManager(val context: Context, private val errorTracker: ErrorTr
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (event?.sensor?.type == Sensor.TYPE_ROTATION_VECTOR) {
-            val rotationVector = event.values
-            val rawMatrix = FloatArray(16)
-            SensorManager.getRotationMatrixFromVector(rawMatrix, rotationVector)
+        if (event?.sensor?.type != Sensor.TYPE_ROTATION_VECTOR) return
 
-            val rotation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                try { context.display?.rotation ?: Surface.ROTATION_0 } catch (e: Exception) { Surface.ROTATION_0 }
-            } else {
-                @Suppress("DEPRECATION")
-                windowManager.defaultDisplay.rotation
+        val rawMatrix = FloatArray(16)
+        SensorManager.getRotationMatrixFromVector(rawMatrix, event.values)
+
+        val rotation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                context.display?.rotation ?: Surface.ROTATION_0
+            } catch (e: Exception) {
+                Surface.ROTATION_0
             }
-
-            // Remap sensor axes to match the device's physical orientation.
-            // Goal: after remapping, matrix[0..2] = device-X, matrix[4..6] = device-Y, matrix[8..10] = device-Z
-            // For a landscape app (fixed ROTATION_90 = USB on right side):
-            //   Device screen-right (X) corresponds to sensor North (+Y)
-            //   Device screen-up    (Y) corresponds to sensor East  (+X)   <- this is the key fix for diagonal issue
-            // For ROTATION_270 (USB on left):
-            //   Device screen-right (X) = sensor -North (-Y)
-            //   Device screen-up    (Y) = sensor -East  (-X)
-            val axisX: Int
-            val axisY: Int
-            when (rotation) {
-                Surface.ROTATION_90 -> {  // Landscape, USB/volume on right (natural landscape for Poco F7)
-                    axisX = SensorManager.AXIS_Y
-                    axisY = SensorManager.AXIS_X
-                }
-                Surface.ROTATION_270 -> { // Landscape, USB/volume on left
-                    axisX = SensorManager.AXIS_MINUS_Y
-                    axisY = SensorManager.AXIS_MINUS_X
-                }
-                Surface.ROTATION_180 -> {
-                    axisX = SensorManager.AXIS_MINUS_X
-                    axisY = SensorManager.AXIS_MINUS_Y
-                }
-                else -> { // Portrait (ROTATION_0)
-                    axisX = SensorManager.AXIS_X
-                    axisY = SensorManager.AXIS_Y
-                }
-            }
-
-            val remapped = FloatArray(16)
-            SensorManager.remapCoordinateSystem(rawMatrix, axisX, axisY, remapped)
-
-            // SkyCanvas world coords: X=East, Y=Up, Z=North  (E, Up, N)
-            // SensorManager world coords after remap: X=East, Y=North, Z=Up  (E, N, Up)
-            //
-            // Permute columns of 'remapped' so that:
-            //   New Col 0 = East  = old Col 0  (no change)
-            //   New Col 1 = Up    = old Col 2  (was Z/Up)
-            //   New Col 2 = North = old Col 1  (was Y/North)
-            //
-            // Memory layout (column-major 4x4):
-            //   Col 0: indices 0,1,2,3
-            //   Col 1: indices 4,5,6,7
-            //   Col 2: indices 8,9,10,11
-            //   Col 3: indices 12,13,14,15
-
-            val worldToDevice = FloatArray(16)
-            // Col 0 = East (unchanged from remapped Col 0)
-            worldToDevice[0] = remapped[0];  worldToDevice[1] = remapped[1];  worldToDevice[2] = remapped[2];  worldToDevice[3] = 0f
-            // Col 1 = Up (from remapped Col 2 = indices 8,9,10)
-            worldToDevice[4] = remapped[8];  worldToDevice[5] = remapped[9];  worldToDevice[6] = remapped[10]; worldToDevice[7] = 0f
-            // Col 2 = North (from remapped Col 1 = indices 4,5,6)
-            worldToDevice[8] = remapped[4];  worldToDevice[9] = remapped[5];  worldToDevice[10] = remapped[6]; worldToDevice[11] = 0f
-            worldToDevice[15] = 1f
-
-            // Transpose to get Device-to-World -> used in SkyCanvas as projection matrix
-            val finalMatrix = FloatArray(16)
-            android.opengl.Matrix.transposeM(finalMatrix, 0, worldToDevice, 0)
-
-            _rotationMatrix.value = finalMatrix
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.rotation
         }
+
+        val axisX: Int
+        val axisY: Int
+        when (rotation) {
+            Surface.ROTATION_90 -> {
+                axisX = SensorManager.AXIS_Y
+                axisY = SensorManager.AXIS_MINUS_X
+            }
+            Surface.ROTATION_270 -> {
+                axisX = SensorManager.AXIS_MINUS_Y
+                axisY = SensorManager.AXIS_X
+            }
+            Surface.ROTATION_180 -> {
+                axisX = SensorManager.AXIS_MINUS_X
+                axisY = SensorManager.AXIS_MINUS_Y
+            }
+            else -> {
+                axisX = SensorManager.AXIS_X
+                axisY = SensorManager.AXIS_Y
+            }
+        }
+
+        val remapped = FloatArray(16)
+        SensorManager.remapCoordinateSystem(rawMatrix, axisX, axisY, remapped)
+
+        // remapped is ScreenToWorld_Sensor
+        // We want R such that Screen = R * World_Canvas
+        // World_Canvas basis: X=East, Y=Up, Z=North
+        // World_Sensor basis: X=East, Y=North, Z=Up
+        
+        // Transpose of remapped (World_SensorToScreen):
+        // Col 0: East_in_Screen
+        // Col 1: North_in_Screen
+        // Col 2: Up_in_Screen
+        
+        // We want a matrix R where:
+        // Col 0: East_in_Screen (remapped Row 0)
+        // Col 1: Up_in_Screen   (remapped Row 2)
+        // Col 2: North_in_Screen (remapped Row 1)
+        
+        val rotationMatrix = FloatArray(16)
+        // Col 0 (East)
+        rotationMatrix[0] = remapped[0]
+        rotationMatrix[1] = remapped[4]
+        rotationMatrix[2] = remapped[8]
+        rotationMatrix[3] = 0f
+        
+        // Col 1 (Up)
+        rotationMatrix[4] = remapped[2]
+        rotationMatrix[5] = remapped[6]
+        rotationMatrix[6] = remapped[10]
+        rotationMatrix[7] = 0f
+        
+        // Col 2 (North)
+        rotationMatrix[8] = remapped[1]
+        rotationMatrix[9] = remapped[5]
+        rotationMatrix[10] = remapped[9]
+        rotationMatrix[11] = 0f
+        
+        rotationMatrix[15] = 1f
+
+        _rotationMatrix.value = rotationMatrix
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 }
