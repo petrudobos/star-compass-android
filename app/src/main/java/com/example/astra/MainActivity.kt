@@ -137,8 +137,8 @@ class MainActivity : ComponentActivity() {
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        .padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Calibration Helper Button
@@ -166,34 +166,43 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // UI Controls - Fixed Landscape (USB on right side)
+                // UI Controls - RIGHT SIDE (USB port on right)
                 Column(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .padding(end = 24.dp)
-                        .width(IntrinsicSize.Max),
-                    verticalArrangement = Arrangement.spacedBy(40.dp),
+                        .padding(end = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                     horizontalAlignment = Alignment.End
                 ) {
-                    // Filter Group
-                    ActionGroup(
-                        showInfo = showFilterInfo,
-                        onToggleInfo = { showFilterInfo = !showFilterInfo },
-                        infoText = "If camera permission wasn't given, the AR background defaults to black.",
-                        icon = Icons.Default.Brightness4,
-                        onAction = { isDarkMode = !isDarkMode },
-                        fabColor = MaterialTheme.colorScheme.secondary
-                    )
+                    // Filter Button
+                    FloatingActionButton(
+                        onClick = { isDarkMode = !isDarkMode },
+                        containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f),
+                        shape = CircleShape,
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Brightness4,
+                            contentDescription = "Toggle Night Mode",
+                            modifier = Modifier.size(28.dp),
+                            tint = Color.White
+                        )
+                    }
 
-                    // Snapshot Group
-                    ActionGroup(
-                        showInfo = showSnapshotInfo,
-                        onToggleInfo = { showSnapshotInfo = !showSnapshotInfo },
-                        infoText = "Captures the current view (camera + stars) to Pictures/StarCompass.",
-                        icon = Icons.Default.CameraAlt,
-                        onAction = { captureAndSaveScreenshot(view) },
-                        fabColor = MaterialTheme.colorScheme.tertiary
-                    )
+                    // Snapshot Button
+                    FloatingActionButton(
+                        onClick = { captureAndSaveScreenshot(view) },
+                        containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f),
+                        shape = CircleShape,
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Take Snapshot",
+                            modifier = Modifier.size(28.dp),
+                            tint = Color.White
+                        )
+                    }
                 }
 
                 // Dialogs
@@ -275,12 +284,12 @@ class MainActivity : ComponentActivity() {
             onClick = onClick,
             containerColor = containerColor.copy(alpha = 0.85f),
             shape = CircleShape,
-            modifier = Modifier.size(56.dp)
+            modifier = Modifier.size(48.dp)
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                modifier = Modifier.size(28.dp),
+                modifier = Modifier.size(24.dp),
                 tint = Color.White
             )
         }
@@ -529,68 +538,39 @@ class MainActivity : ComponentActivity() {
             // Simulate calibration time
             delay(3000)
             
-            val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(
-                    VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(200)
+            // Check if we have permission to vibrate
+            if (!hasPermission(Manifest.permission.VIBRATE)) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Compass calibrated! ✓ (Haptic feedback unavailable)",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
             }
             
-            Toast.makeText(
-                this@MainActivity,
-                "Compass calibrated! ✓",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
-
-    @Composable
-    fun ActionGroup(
-        showInfo: Boolean,
-        onToggleInfo: () -> Unit,
-        infoText: String,
-        icon: androidx.compose.ui.graphics.vector.ImageVector,
-        onAction: () -> Unit,
-        fabColor: Color
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.End
-        ) {
-            if (showInfo) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .padding(end = 12.dp)
-                        .widthIn(max = 220.dp)
-                        .clickable { onToggleInfo() }
-                ) {
-                    Text(
-                        text = infoText,
-                        modifier = Modifier.padding(12.dp),
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            try {
+                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(
+                        VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE)
                     )
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(200)
                 }
-            }
-
-            IconButton(onClick = onToggleInfo) {
-                Icon(Icons.Default.Info, contentDescription = "Info", tint = Color.White)
-            }
-
-            FloatingActionButton(
-                onClick = onAction,
-                containerColor = fabColor,
-                shape = CircleShape,
-                modifier = Modifier.size(64.dp)
-            ) {
-                Icon(icon, contentDescription = "Action", modifier = Modifier.size(32.dp))
+                
+                Toast.makeText(
+                    this@MainActivity,
+                    "Compass calibrated! ✓",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: SecurityException) {
+                // Permission denied at runtime
+                Toast.makeText(
+                    this@MainActivity,
+                    "Compass calibrated! ✓",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
