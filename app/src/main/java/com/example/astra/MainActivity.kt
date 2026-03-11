@@ -50,6 +50,10 @@ class MainActivity : ComponentActivity() {
     private var cameraPermissionGranted by mutableStateOf(false)
     private var locationPermissionGranted by mutableStateOf(false)
 
+    // Hoisted to class level so it resets every time onStart() is called.
+    // This ensures the dialog re-appears every time the app is opened while permissions are missing.
+    private var showPermissionRationale by mutableStateOf(false)
+
     private val requestPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -68,7 +72,7 @@ class MainActivity : ComponentActivity() {
         locationManager = LocationManager(this, errorTracker)
         starRepository = StarRepository(this)
 
-        lifecycleScope.launch { 
+        lifecycleScope.launch {
             try {
                 starRepository.seedDatabase()
             } catch (e: Exception) { }
@@ -82,15 +86,15 @@ class MainActivity : ComponentActivity() {
             val stars by starRepository.getAllStars().collectAsState(initial = emptyList())
             val location by locationManager.location.collectAsState()
             val errors = errorTracker.errors
-            
+
             var isDarkMode by remember { mutableStateOf(false) }
             var showSnapshotInfo by remember { mutableStateOf(false) }
             var showFilterInfo by remember { mutableStateOf(false) }
-            var showPermissionRationale by remember { mutableStateOf(true) }
-            
+
             val view = LocalView.current
 
             Box(modifier = Modifier.fillMaxSize()) {
+                // Camera background
                 if (cameraPermissionGranted) {
                     CameraPreview(onError = { errorTracker.reportError(AppError.CameraError(it)) })
                 } else {
@@ -105,8 +109,8 @@ class MainActivity : ComponentActivity() {
                     isDarkMode = isDarkMode
                 )
 
-                // UI Controls - Adjusted to match the hand-drawn layout
-                // Container aligned to the right edge
+                // ── UI Controls: right edge, vertically centered ──────────────────────
+                // All icons/buttons rotated +90° to match landscape orientation.
                 Column(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
@@ -114,7 +118,7 @@ class MainActivity : ComponentActivity() {
                     verticalArrangement = Arrangement.spacedBy(40.dp),
                     horizontalAlignment = Alignment.End
                 ) {
-                    // Filter Group (Now topmost row in the center-right stack)
+                    // ── Filter Group ──────────────────────────────────────────────────
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End
@@ -127,10 +131,10 @@ class MainActivity : ComponentActivity() {
                                     .padding(end = 12.dp)
                                     .widthIn(max = 220.dp)
                                     .clickable { showFilterInfo = false }
-                                    .rotate(90f) // Rotated to point toward lower edge
+                                    .rotate(90f)
                             ) {
                                 Text(
-                                    text = "if camera permissions weren't given, the AR default background is black",
+                                    text = "If camera permission wasn't given, the AR background defaults to black.",
                                     modifier = Modifier.padding(12.dp),
                                     fontSize = 13.sp,
                                     lineHeight = 18.sp,
@@ -139,8 +143,11 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
-                        
-                        IconButton(onClick = { showFilterInfo = !showFilterInfo }, modifier = Modifier.rotate(90f)) {
+
+                        IconButton(
+                            onClick = { showFilterInfo = !showFilterInfo },
+                            modifier = Modifier.rotate(90f)
+                        ) {
                             Icon(Icons.Default.Info, contentDescription = "Filter Info", tint = Color.White)
                         }
 
@@ -148,13 +155,19 @@ class MainActivity : ComponentActivity() {
                             onClick = { isDarkMode = !isDarkMode },
                             containerColor = MaterialTheme.colorScheme.secondary,
                             shape = CircleShape,
-                            modifier = Modifier.rotate(90f).size(64.dp)
+                            modifier = Modifier
+                                .rotate(90f)
+                                .size(64.dp)
                         ) {
-                            Icon(Icons.Default.Brightness4, contentDescription = "Toggle Dark Overlay", modifier = Modifier.size(32.dp))
+                            Icon(
+                                Icons.Default.Brightness4,
+                                contentDescription = "Toggle Dark Overlay",
+                                modifier = Modifier.size(32.dp)
+                            )
                         }
                     }
 
-                    // Snapshot Group (Second row)
+                    // ── Snapshot Group ────────────────────────────────────────────────
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End
@@ -170,7 +183,7 @@ class MainActivity : ComponentActivity() {
                                     .rotate(90f)
                             ) {
                                 Text(
-                                    text = "Captures the current view (camera + stars) to Pictures/StarCompass",
+                                    text = "Captures the current view (camera + stars) to Pictures/StarCompass.",
                                     modifier = Modifier.padding(12.dp),
                                     fontSize = 13.sp,
                                     lineHeight = 18.sp,
@@ -179,8 +192,12 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
-                        
-                        IconButton(onClick = { showSnapshotInfo = !showSnapshotInfo }, modifier = Modifier.rotate(-90f)) {
+
+                        // +90f consistent with the rest of the UI
+                        IconButton(
+                            onClick = { showSnapshotInfo = !showSnapshotInfo },
+                            modifier = Modifier.rotate(90f)
+                        ) {
                             Icon(Icons.Default.Info, contentDescription = "Snapshot Info", tint = Color.White)
                         }
 
@@ -188,27 +205,38 @@ class MainActivity : ComponentActivity() {
                             onClick = { captureAndSaveScreenshot(view) },
                             containerColor = MaterialTheme.colorScheme.tertiary,
                             shape = CircleShape,
-                            modifier = Modifier.rotate(-90f).size(64.dp)
+                            modifier = Modifier
+                                .rotate(90f)
+                                .size(64.dp)
                         ) {
-                            Icon(Icons.Default.CameraAlt, contentDescription = "Take Snapshot", modifier = Modifier.size(32.dp))
+                            Icon(
+                                Icons.Default.CameraAlt,
+                                contentDescription = "Take Snapshot",
+                                modifier = Modifier.size(32.dp)
+                            )
                         }
                     }
                 }
 
-                // Initial Permission Rationale Dialog
+                // ── Permission Dialog ─────────────────────────────────────────────────
+                // showPermissionRationale is a class-level mutableStateOf reset in onStart(),
+                // so it always shows on each fresh app open when permissions are missing.
+                // Using key(showPermissionRationale) prevents dismiss on screen rotation.
                 if (showPermissionRationale && (!cameraPermissionGranted || !locationPermissionGranted)) {
-                    PermissionDialog(
-                        onConfirm = {
-                            showPermissionRationale = false
-                            checkAndRequestPermissions()
-                        },
-                        onDismiss = { showPermissionRationale = false }
-                    )
+                    key(showPermissionRationale) {
+                        PermissionDialog(
+                            onConfirm = {
+                                showPermissionRationale = false
+                                checkAndRequestPermissions()
+                            },
+                            onDismiss = { showPermissionRationale = false }
+                        )
+                    }
                 }
 
                 if (errors.isNotEmpty()) {
                     ErrorOverlay(
-                        errors = errors, 
+                        errors = errors,
                         onDismiss = { errorTracker.dismissError(it) },
                         locationPermissionMissing = !locationPermissionGranted
                     )
@@ -222,6 +250,12 @@ class MainActivity : ComponentActivity() {
         orientationManager.start()
         if (hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
             locationManager.requestSingleUpdate()
+        }
+        // Re-check permission state and show dialog again if still missing.
+        cameraPermissionGranted = hasPermission(Manifest.permission.CAMERA)
+        locationPermissionGranted = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+        if (!cameraPermissionGranted || !locationPermissionGranted) {
+            showPermissionRationale = true
         }
     }
 
@@ -288,7 +322,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkAndRequestPermissions() {
-        val permissionsToRequest = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION)
+        val permissionsToRequest = mutableListOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
             permissionsToRequest.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
@@ -302,7 +339,11 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun ErrorOverlay(errors: List<AppError>, onDismiss: (AppError) -> Unit, locationPermissionMissing: Boolean) {
-    Box(modifier = Modifier.fillMaxSize().padding(16.dp).statusBarsPadding()) {
+    Box(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)
+        .statusBarsPadding()
+    ) {
         errors.forEach { error ->
             if (error is AppError.LocationError && !locationPermissionMissing) return@forEach
 
@@ -312,7 +353,7 @@ fun ErrorOverlay(errors: List<AppError>, onDismiss: (AppError) -> Unit, location
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .rotate(if (error is AppError.LocationError) 90f else 0f)
+                    .rotate(90f)
                     .fillMaxWidth(0.8f)
             ) {
                 Row(
