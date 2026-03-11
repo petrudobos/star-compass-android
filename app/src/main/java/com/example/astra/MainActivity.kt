@@ -117,7 +117,7 @@ class MainActivity : ComponentActivity() {
                     isDarkMode = isDarkMode
                 )
 
-                // Top-center buttons: tap directly opens the dialog, no info toggle
+                // Top-center: tap to open dialog directly
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
@@ -125,41 +125,33 @@ class MainActivity : ComponentActivity() {
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Calibration button
                     FloatingActionButton(
                         onClick = { showCalibrationDialogState = true },
                         containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-                        shape = CircleShape,
-                        modifier = Modifier.size(48.dp)
+                        shape = CircleShape, modifier = Modifier.size(48.dp)
                     ) {
                         Icon(Icons.Default.Explore, contentDescription = "Calibrate",
                             modifier = Modifier.size(24.dp), tint = Color.White)
                     }
-
-                    // AR Test button
                     FloatingActionButton(
                         onClick = { showARTestDialog = true },
                         containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.85f),
-                        shape = CircleShape,
-                        modifier = Modifier.size(48.dp)
+                        shape = CircleShape, modifier = Modifier.size(48.dp)
                     ) {
                         Icon(Icons.Default.Navigation, contentDescription = "AR Test",
                             modifier = Modifier.size(24.dp), tint = Color.White)
                     }
-
-                    // Compass Issues button
                     FloatingActionButton(
                         onClick = { showCompassIssuesDialog = true },
                         containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
-                        shape = CircleShape,
-                        modifier = Modifier.size(48.dp)
+                        shape = CircleShape, modifier = Modifier.size(48.dp)
                     ) {
                         Icon(Icons.Default.Warning, contentDescription = "Compass Issues",
                             modifier = Modifier.size(24.dp), tint = Color.White)
                     }
                 }
 
-                // Right-side controls with info toggle
+                // Right-side controls
                 Column(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
@@ -186,28 +178,20 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // Dialogs
                 if (showPermissionRationale && (!cameraPermissionGranted || !locationPermissionGranted)) {
                     PermissionDialog(
                         onConfirm = { showPermissionRationale = false; checkAndRequestPermissions() },
                         onDismiss = { showPermissionRationale = false }
                     )
                 }
-
                 if (showCalibrationDialogState) {
                     CalibrationDialog(
                         onDismiss = { showCalibrationDialogState = false; showCalibrationDialog = false },
                         onCalibrate = { triggerHapticFeedback(); showCalibrationDialogState = false; showCalibrationDialog = false }
                     )
                 }
-
-                if (showARTestDialog) {
-                    ARTestDialog(onDismiss = { showARTestDialog = false })
-                }
-
-                if (showCompassIssuesDialog) {
-                    CompassIssuesDialog(onDismiss = { showCompassIssuesDialog = false })
-                }
+                if (showARTestDialog)        ARTestDialog(onDismiss = { showARTestDialog = false })
+                if (showCompassIssuesDialog) CompassIssuesDialog(onDismiss = { showCompassIssuesDialog = false })
 
                 if (errors.isNotEmpty()) {
                     ErrorOverlay(
@@ -232,48 +216,33 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         orientationManager.stop()
+        locationManager.stopUpdates()   // stop location updates when app is backgrounded
     }
 
     @Composable
     fun ActionGroup(
-        showInfo: Boolean,
-        onToggleInfo: () -> Unit,
-        infoText: String,
+        showInfo: Boolean, onToggleInfo: () -> Unit, infoText: String,
         icon: androidx.compose.ui.graphics.vector.ImageVector,
-        onAction: () -> Unit,
-        fabColor: Color
+        onAction: () -> Unit, fabColor: Color
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.End
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
             if (showInfo) {
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .padding(end = 12.dp)
-                        .widthIn(max = 220.dp)
-                        .clickable { onToggleInfo() }
+                    modifier = Modifier.padding(end = 12.dp).widthIn(max = 220.dp).clickable { onToggleInfo() }
                 ) {
-                    Text(
-                        text = infoText,
-                        modifier = Modifier.padding(12.dp),
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(text = infoText, modifier = Modifier.padding(12.dp),
+                        fontSize = 13.sp, lineHeight = 18.sp, textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             IconButton(onClick = onToggleInfo) {
                 Icon(Icons.Default.Info, contentDescription = "Info", tint = Color.White)
             }
             FloatingActionButton(
-                onClick = onAction,
-                containerColor = fabColor.copy(alpha = 0.9f),
-                shape = CircleShape,
-                modifier = Modifier.size(56.dp)
+                onClick = onAction, containerColor = fabColor.copy(alpha = 0.9f),
+                shape = CircleShape, modifier = Modifier.size(56.dp)
             ) {
                 Icon(icon, contentDescription = null, modifier = Modifier.size(28.dp))
             }
@@ -285,19 +254,14 @@ class MainActivity : ComponentActivity() {
         AlertDialog(
             onDismissRequest = onDismiss,
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
-            icon = {
-                Icon(Icons.Default.Explore, contentDescription = null,
-                    modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
-            },
+            icon = { Icon(Icons.Default.Explore, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary) },
             title = { Text("Calibrate Your Compass", fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) },
             text = {
-                Column(
-                    modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                Column(modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("This is CRITICAL for compass-based orientation!",
                         fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(Modifier.height(8.dp))
                     InstructionStep("1", "Open the app on your phone")
                     InstructionStep("2", "Hold the phone in landscape (USB on right)")
                     InstructionStep("3", "Move the phone in a figure-8 pattern for 10-15 seconds")
@@ -318,16 +282,11 @@ class MainActivity : ComponentActivity() {
         AlertDialog(
             onDismissRequest = onDismiss,
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
-            icon = {
-                Icon(Icons.Default.Navigation, contentDescription = null,
-                    modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.tertiary)
-            },
+            icon = { Icon(Icons.Default.Navigation, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.tertiary) },
             title = { Text("Test AR Alignment", fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) },
             text = {
-                Column(
-                    modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                Column(modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     InstructionStep("1", "Point phone at North (use a compass app to verify)")
                     BulletPoint("The big red \"N\" label should appear in the center/top")
                     InstructionStep("2", "Rotate 90° to face East")
@@ -350,18 +309,12 @@ class MainActivity : ComponentActivity() {
         AlertDialog(
             onDismissRequest = onDismiss,
             properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
-            icon = {
-                Icon(Icons.Default.Warning, contentDescription = null,
-                    modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.error)
-            },
+            icon = { Icon(Icons.Default.Warning, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.error) },
             title = { Text("🧭 Understanding Compass Issues", fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) },
             text = {
-                Column(
-                    modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("Your compass might be affected by:",
-                        fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Column(modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Your compass might be affected by:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     IssueItem("Magnetic interference", "Cases with magnets, metal surfaces, speakers")
                     IssueItem("Indoor environments", "Steel beams in buildings")
                     IssueItem("Device calibration", "Needs periodic figure-8 calibration")
@@ -372,24 +325,19 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    @Composable
-    fun InstructionStep(number: String, text: String) {
+    @Composable fun InstructionStep(number: String, text: String) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
             Text(number, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
             Text(text, fontSize = 14.sp, lineHeight = 20.sp)
         }
     }
-
-    @Composable
-    fun BulletPoint(text: String) {
+    @Composable fun BulletPoint(text: String) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
             Text("•", fontSize = 14.sp, color = MaterialTheme.colorScheme.secondary)
             Text(text, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-
-    @Composable
-    fun IssueItem(title: String, description: String) {
+    @Composable fun IssueItem(title: String, description: String) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = MaterialTheme.colorScheme.error)
             Text(description, fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -405,12 +353,9 @@ class MainActivity : ComponentActivity() {
             }
             try {
                 val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                     vibrator.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator.vibrate(200)
-                }
+                else { @Suppress("DEPRECATION") vibrator.vibrate(200) }
                 Toast.makeText(this@MainActivity, "Compass calibrated! ✓", Toast.LENGTH_SHORT).show()
             } catch (e: SecurityException) {
                 Toast.makeText(this@MainActivity, "Compass calibrated! ✓", Toast.LENGTH_SHORT).show()
@@ -418,8 +363,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @Composable
-    fun PermissionDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    @Composable fun PermissionDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
         AlertDialog(
             onDismissRequest = {},
             properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
@@ -434,9 +378,7 @@ class MainActivity : ComponentActivity() {
             dismissButton = { TextButton(onClick = onDismiss) { Text("Later") } }
         )
     }
-
-    @Composable
-    fun PermissionItem(title: String, description: String) {
+    @Composable fun PermissionItem(title: String, description: String) {
         Column {
             Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Text(description, fontSize = 14.sp, textAlign = TextAlign.Justify)
@@ -450,45 +392,30 @@ class MainActivity : ComponentActivity() {
         val filename = "StarCompass_${System.currentTimeMillis()}.png"
         var fos: OutputStream? = null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val contentValues = ContentValues().apply {
+            val cv = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
                 put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
                 put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/StarCompass")
             }
-            val imageUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-            fos = imageUri?.let { contentResolver.openOutputStream(it) }
+            val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv)
+            fos = uri?.let { contentResolver.openOutputStream(it) }
         }
         fos?.use {
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
             Toast.makeText(this, "Snapshot saved to Pictures/StarCompass", Toast.LENGTH_SHORT).show()
-        } ?: run {
-            Toast.makeText(this, "Failed to save snapshot", Toast.LENGTH_SHORT).show()
-        }
+        } ?: Toast.makeText(this, "Failed to save snapshot", Toast.LENGTH_SHORT).show()
     }
 
     private fun checkAndRequestPermissions() {
-        requestPermissionsLauncher.launch(
-            arrayOf(Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION)
-        )
+        requestPermissionsLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION))
     }
-
-    private fun hasPermission(permission: String): Boolean {
-        return ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
-    }
+    private fun hasPermission(permission: String) =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 }
 
 @Composable
-fun ErrorOverlay(
-    errors: List<AppError>,
-    onDismiss: (AppError) -> Unit,
-    locationPermissionMissing: Boolean
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .statusBarsPadding()
-    ) {
+fun ErrorOverlay(errors: List<AppError>, onDismiss: (AppError) -> Unit, locationPermissionMissing: Boolean) {
+    Box(modifier = Modifier.fillMaxSize().padding(16.dp).statusBarsPadding()) {
         errors.forEach { error ->
             if (error is AppError.LocationError && !locationPermissionMissing) return@forEach
             Surface(
@@ -497,14 +424,9 @@ fun ErrorOverlay(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.8f)
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(text = error.message, modifier = Modifier.weight(1f))
-                    if (error.recoverable) {
-                        TextButton(onClick = { onDismiss(error) }) { Text("Dismiss") }
-                    }
+                    if (error.recoverable) TextButton(onClick = { onDismiss(error) }) { Text("Dismiss") }
                 }
             }
         }
