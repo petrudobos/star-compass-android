@@ -12,18 +12,17 @@ import com.example.astra.ui.AppError
 import com.example.astra.ui.ErrorTracker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
- * Orientation manager using GEOMAGNETIC_ROTATION_VECTOR sensor.
+ * Orientation manager using GEOMAGNETIC_ROTATION_VECTOR sensor with proper
+ * 90-degree rotation compensation for landscape mode (USB on right).
  * 
- * This sensor combines magnetometer (compass) + accelerometer WITHOUT gyroscope,
- * giving maximum compass influence and avoiding gyroscope drift.
- * 
- * Benefits:
- * - Direct magnetic north alignment (compass-first)
- * - No gyroscope drift accumulation
- * - Simpler calibration (just figure-8 pattern for magnetometer)
- * - More stable for AR star tracking
+ * Key insight: In landscape mode with USB on right, the device's physical X-axis
+ * points UP on screen, and the physical Y-axis points LEFT on screen.
+ * We need to rotate the geomagnetic coordinate system 90° clockwise to align
+ * with the screen coordinate system for accurate compass-to-screen mapping.
  */
 class OrientationManager(
     val context: Context,
@@ -32,15 +31,13 @@ class OrientationManager(
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     
-    // Geomagnetic rotation vector: magnetometer + accelerometer (no gyro)
+    // Geomagnetic rotation vector: magnetometer + accelerometer (no gyro drift)
     private val geomagneticSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR)
         ?: sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) // Fallback
     
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
-    // Low-pass filter constant - REDUCED for smoother movement
-    // Lower = smoother but slightly slower response
-    // 0.10 = smooth tracking, good for star gazing
+    // Smoother filtering for stable star tracking
     private val ALPHA = 0.10f
 
     private var lastRotationVector = FloatArray(5)
@@ -51,7 +48,6 @@ class OrientationManager(
     })
     val rotationMatrix = _rotationMatrix.asStateFlow()
 
-    // Track calibration time (first 10-15 seconds)
     private var startTime = 0L
     private var isCalibrating = true
 
@@ -64,7 +60,6 @@ class OrientationManager(
         startTime = System.currentTimeMillis()
         isCalibrating = true
         
-        // Use SENSOR_DELAY_GAME for good balance between smoothness and battery
         sensorManager.registerListener(this, geomagneticSensor, SensorManager.SENSOR_DELAY_GAME)
     }
 
@@ -75,35 +70,31 @@ class OrientationManager(
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null) return
         
-        // Check if we're past calibration period (15 seconds)
         if (isCalibrating && System.currentTimeMillis() - startTime > 15000) {
             isCalibrating = false
         }
 
-        // Accept both geomagnetic and regular rotation vector
         if (event.sensor.type != Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR &&
             event.sensor.type != Sensor.TYPE_ROTATION_VECTOR) {
             return
         }
 
-        // Apply low-pass filter for smooth movement
+        // Low-pass filter for smooth movement
         if (!isInitialized) {
-            // First reading: initialize without filtering
             System.arraycopy(event.values, 0, lastRotationVector, 0, 
                 minOf(event.values.size, lastRotationVector.size))
             isInitialized = true
         } else {
-            // Subsequent readings: apply low-pass filter
             for (i in 0 until minOf(event.values.size, lastRotationVector.size)) {
                 lastRotationVector[i] = ALPHA * event.values[i] + (1 - ALPHA) * lastRotationVector[i]
             }
         }
 
-        // Convert rotation vector to rotation matrix
-        val rawMatrix = FloatArray(16)
-        SensorManager.getRotationMatrixFromVector(rawMatrix, lastRotationVector)
+        // Get base rotation matrix from sensor
+        val sensorMatrix = FloatArray(16)
+        SensorManager.getRotationMatrixFromVector(sensorMatrix, lastRotationVector)
 
-        // Get device rotation to handle screen orientation
+        // Get device screen rotation
         val rotation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
                 context.display?.rotation ?: Surface.ROTATION_0
@@ -115,103 +106,102 @@ class OrientationManager(
             windowManager.defaultDisplay.rotation
         }
 
-        // Remap coordinate system based on device rotation
-        val remapped = FloatArray(16)
+        // Apply coordinate remapping for screen orientation
+        val remappedMatrix = FloatArray(16)
         when (rotation) {
             Surface.ROTATION_90 -> {
-                // Landscape: USB on right (our target orientation)
+                // Landscape: USB on right
+                // This is our target orientation
+                // Device X-axis (right when portrait) now points UP on screen
+                // Device Y-axis (up when portrait) now points LEFT on screen
+                // We need to remap so that:
+                // - World North maps correctly to screen left/right movement
+                // - World Up maps correctly to screen up/down movement
                 SensorManager.remapCoordinateSystem(
-                    rawMatrix,
-                    SensorManager.AXIS_Y,
-                    SensorManager.AXIS_MINUS_X,
-                    remapped
+                    sensorMatrix,
+                    SensorManager.AXIS_Y,        // Old Y (North in portrait) becomes new X
+                    SensorManager.AXIS_MINUS_X,  // Old -X (West in portrait) becomes new Y
+                    remappedMatrix
                 )
             }
             Surface.ROTATION_270 -> {
                 // Landscape: USB on left
                 SensorManager.remapCoordinateSystem(
-                    rawMatrix,
+                    sensorMatrix,
                     SensorManager.AXIS_MINUS_Y,
                     SensorManager.AXIS_X,
-                    remapped
+                    remappedMatrix
                 )
             }
             Surface.ROTATION_180 -> {
                 // Upside down portrait
                 SensorManager.remapCoordinateSystem(
-                    rawMatrix,
+                    sensorMatrix,
                     SensorManager.AXIS_MINUS_X,
                     SensorManager.AXIS_MINUS_Y,
-                    remapped
+                    remappedMatrix
                 )
             }
             else -> {
                 // Portrait (normal)
-                SensorManager.remapCoordinateSystem(
-                    rawMatrix,
-                    SensorManager.AXIS_X,
-                    SensorManager.AXIS_Y,
-                    remapped
-                )
+                System.arraycopy(sensorMatrix, 0, remappedMatrix, 0, 16)
             }
         }
 
-        // Convert to our sky coordinate system
-        // remapped gives us device-to-world transformation
-        // Columns of remapped represent:
-        // Col 0: East direction in device space
-        // Col 1: North direction in device space
-        // Col 2: Up direction in device space
+        // The remappedMatrix now represents device-to-world transformation
+        // For landscape (ROTATION_90), the matrix columns are:
+        // Column 0: Direction that device's screen-right points to in world space
+        // Column 1: Direction that device's screen-up points to in world space  
+        // Column 2: Direction that device's screen-forward points to in world space
         
-        // Our sky canvas uses: X=East, Y=Up, Z=North
-        val matrix = FloatArray(16)
+        // Our sky canvas coordinate system:
+        // X-axis = East
+        // Y-axis = Up (zenith)
+        // Z-axis = North
         
-        // Column 0: East (X-axis)
-        matrix[0] = remapped[0]   // East X
-        matrix[1] = remapped[4]   // East Y
-        matrix[2] = remapped[8]   // East Z
-        matrix[3] = 0f
+        // We want a matrix that transforms world coordinates to screen coordinates
+        // The columns should represent where world axes appear on screen
         
-        // Column 1: Up (Y-axis)
-        matrix[4] = remapped[2]   // Up X
-        matrix[5] = remapped[6]   // Up Y
-        matrix[6] = remapped[10]  // Up Z
-        matrix[7] = 0f
+        val finalMatrix = FloatArray(16)
         
-        // Column 2: North (Z-axis)
-        matrix[8] = remapped[1]   // North X
-        matrix[9] = remapped[5]   // North Y
-        matrix[10] = remapped[9]  // North Z
-        matrix[11] = 0f
+        // Extract the basis vectors from remapped matrix
+        // These tell us where world directions point in device space
         
-        // Translation (none)
-        matrix[12] = 0f
-        matrix[13] = 0f
-        matrix[14] = 0f
-        matrix[15] = 1f
+        // For our rendering:
+        // Column 0: Where East points in screen coordinates
+        finalMatrix[0] = remappedMatrix[0]   // East -> Screen X component
+        finalMatrix[1] = remappedMatrix[4]   // East -> Screen Y component  
+        finalMatrix[2] = remappedMatrix[8]   // East -> Screen Z component
+        finalMatrix[3] = 0f
+        
+        // Column 1: Where Up points in screen coordinates
+        finalMatrix[4] = remappedMatrix[2]   // Up -> Screen X component
+        finalMatrix[5] = remappedMatrix[6]   // Up -> Screen Y component
+        finalMatrix[6] = remappedMatrix[10]  // Up -> Screen Z component
+        finalMatrix[7] = 0f
+        
+        // Column 2: Where North points in screen coordinates
+        finalMatrix[8] = remappedMatrix[1]   // North -> Screen X component
+        finalMatrix[9] = remappedMatrix[5]   // North -> Screen Y component
+        finalMatrix[10] = remappedMatrix[9]  // North -> Screen Z component
+        finalMatrix[11] = 0f
+        
+        // No translation
+        finalMatrix[12] = 0f
+        finalMatrix[13] = 0f
+        finalMatrix[14] = 0f
+        finalMatrix[15] = 1f
 
-        _rotationMatrix.value = matrix
+        _rotationMatrix.value = finalMatrix
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // Monitor compass accuracy during calibration period
         if (sensor?.type == Sensor.TYPE_MAGNETIC_FIELD || 
             sensor?.type == Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR) {
             
             when (accuracy) {
-                SensorManager.SENSOR_STATUS_UNRELIABLE -> {
-                    if (isCalibrating) {
-                        // User should continue figure-8 calibration
-                    }
-                }
-                SensorManager.SENSOR_STATUS_ACCURACY_LOW -> {
-                    if (isCalibrating) {
-                        // Keep calibrating
-                    }
-                }
                 SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM,
                 SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> {
-                    // Good accuracy achieved
                     isCalibrating = false
                 }
             }

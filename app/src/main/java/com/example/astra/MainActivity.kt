@@ -133,11 +133,11 @@ class MainActivity : ComponentActivity() {
                     isDarkMode = isDarkMode
                 )
 
-                // Helper Buttons - Center of screen (Landscape orientation)
+                // Helper Buttons - TOP CENTER of screen (Landscape orientation)
                 Row(
                     modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(16.dp),
+                        .align(Alignment.TopCenter)
+                        .padding(top = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
