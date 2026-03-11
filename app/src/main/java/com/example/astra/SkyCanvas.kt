@@ -56,12 +56,11 @@ fun SkyCanvas(
         val height = size.height
         val centerX = width / 2f
         val centerY = height / 2f
-        
-        // Field of view
-        val fovY = 60f 
+
+        val fovY = 60f
         val aspectRatio = width / height
         val fovX = fovY * aspectRatio
-        
+
         val scaleX = width / fovX
         val scaleY = height / fovY
 
@@ -69,7 +68,6 @@ fun SkyCanvas(
             drawRect(color = Color.Black.copy(alpha = 0.7f))
         }
 
-        // Text drawing helper - upright in landscape
         fun drawSkyText(text: String, x: Float, y: Float, paint: Paint, offsetBelow: Float = 0f) {
             drawIntoCanvas { canvas ->
                 canvas.nativeCanvas.drawText(text, x, y + offsetBelow, paint)
@@ -80,15 +78,9 @@ fun SkyCanvas(
         val sunHorizon = AstronomyUtils.toHorizon(sunPos.ra, sunPos.dec, lat, lon, lst)
         val sunScreenPos = projectToScreen(sunHorizon.az, sunHorizon.alt, rotationMatrix, centerX, centerY, scaleX, scaleY)
         if (sunScreenPos != null) {
-            drawCircle(
-                color = Color.Yellow,
-                radius = 30f,
-                center = sunScreenPos
-            )
+            drawCircle(color = Color.Yellow, radius = 30f, center = sunScreenPos)
             drawSkyText(
-                "SUN",
-                sunScreenPos.x,
-                sunScreenPos.y,
+                "SUN", sunScreenPos.x, sunScreenPos.y,
                 Paint().apply {
                     color = android.graphics.Color.YELLOW
                     textSize = 50f
@@ -105,9 +97,7 @@ fun SkyCanvas(
             val screenPos = projectToScreen(az, 0.0, rotationMatrix, centerX, centerY, scaleX, scaleY)
             if (screenPos != null) {
                 drawSkyText(
-                    label,
-                    screenPos.x,
-                    screenPos.y,
+                    label, screenPos.x, screenPos.y,
                     Paint().apply {
                         color = android.graphics.Color.RED
                         textSize = 60f
@@ -122,22 +112,13 @@ fun SkyCanvas(
         stars.forEach { star ->
             val horizon = AstronomyUtils.toHorizon(star.ra, star.dec, lat, lon, lst)
             val screenPos = projectToScreen(horizon.az, horizon.alt, rotationMatrix, centerX, centerY, scaleX, scaleY)
-
             if (screenPos != null) {
                 val starSize = max(3f, 10f - star.magnitude * 1.5f)
                 val starAlpha = (1.0f - (star.magnitude / 6.0f)).coerceIn(0.2f, 1.0f)
-                
-                drawCircle(
-                    color = Color.White.copy(alpha = starAlpha),
-                    radius = starSize,
-                    center = screenPos
-                )
-
+                drawCircle(color = Color.White.copy(alpha = starAlpha), radius = starSize, center = screenPos)
                 if (star.magnitude < 4.0f && star.commonName != null) {
                     drawSkyText(
-                        star.commonName!!,
-                        screenPos.x,
-                        screenPos.y,
+                        star.commonName!!, screenPos.x, screenPos.y,
                         Paint().apply {
                             color = android.graphics.Color.WHITE
                             textSize = 30f
@@ -154,9 +135,7 @@ fun SkyCanvas(
         drawConstellations(stars, lat, lon, lst, rotationMatrix, centerX, centerY, scaleX, scaleY) { name, x, y ->
             constellationLabels.add(ConstellationLabel(name, x, y))
             drawSkyText(
-                name.uppercase(),
-                x,
-                y,
+                name.uppercase(), x, y,
                 Paint().apply {
                     color = android.graphics.Color.CYAN
                     textSize = 45f
@@ -173,23 +152,15 @@ data class ConstellationLabel(val name: String, val x: Float, val y: Float)
 
 /**
  * Projects a celestial position (azimuth, altitude) to screen coordinates.
- * 
- * @param az Azimuth in degrees (0=North, 90=East, 180=South, 270=West)
- * @param alt Altitude in degrees (0=horizon, 90=zenith)
- * @param rotationMatrix The current device orientation matrix from OrientationManager
- *                       (screen-to-world transformation)
- * 
- * Process:
- * 1. Convert (az, alt) to world vector in horizon coordinates:
- *    - X: East (sin(az) * cos(alt))
- *    - Y: North (cos(az) * cos(alt))  
- *    - Z: Up/Zenith (sin(alt))
- * 
- * 2. Transform world vector to screen space using rotationMatrix
- *    Matrix multiplication gives us (screenX, screenY, screenZ)
- * 
- * 3. Project to 2D screen using perspective division
- *    Only render if screenZ > 0 (in front of camera)
+ *
+ * Fix: negate worldX (East component) to correct the mirrored E/W and N/S swap.
+ * The sensor matrix produces a left-handed screen projection, so flipping
+ * the East axis maps the sky correctly: N=North, S=South, E=East, W=West.
+ *
+ * World coordinate system (horizon):
+ *   X = East  (negated below to fix mirror)
+ *   Y = North
+ *   Z = Up / Zenith
  */
 fun projectToScreen(
     az: Double,
@@ -202,36 +173,25 @@ fun projectToScreen(
 ): Offset? {
     val altRad = Math.toRadians(alt)
     val azRad = Math.toRadians(az)
-    
-    // World space vector (horizon coordinates)
-    // X = East, Y = North, Z = Up
-    val worldX = sin(azRad) * cos(altRad)  // East component
-    val worldY = cos(azRad) * cos(altRad)  // North component
-    val worldZ = sin(altRad)               // Up component
 
-    // Transform to screen space using rotation matrix
-    // rotationMatrix rows tell us where screen axes point in world
-    // Multiply: screenVec = rotationMatrix * worldVec
-    //
-    // Row 0 (indices 0,1,2): screen +X direction in world
-    val screenX_vec = (rotationMatrix[0] * worldX + 
-                       rotationMatrix[1] * worldY + 
+    // Negate worldX to fix E<->W and consequently N<->S mirror
+    val worldX = -(sin(azRad) * cos(altRad))  // East component (negated to fix swap)
+    val worldY =   cos(azRad) * cos(altRad)   // North component
+    val worldZ =   sin(altRad)                // Up component
+
+    val screenX_vec = (rotationMatrix[0] * worldX +
+                       rotationMatrix[1] * worldY +
                        rotationMatrix[2] * worldZ).toFloat()
-    
-    // Row 1 (indices 4,5,6): screen +Y direction in world  
-    val screenY_vec = (rotationMatrix[4] * worldX + 
-                       rotationMatrix[5] * worldY + 
+
+    val screenY_vec = (rotationMatrix[4] * worldX +
+                       rotationMatrix[5] * worldY +
                        rotationMatrix[6] * worldZ).toFloat()
-    
-    // Row 2 (indices 8,9,10): screen +Z (viewing direction) in world
-    val screenZ_vec = (rotationMatrix[8] * worldX + 
-                       rotationMatrix[9] * worldY + 
+
+    val screenZ_vec = (rotationMatrix[8] * worldX +
+                       rotationMatrix[9] * worldY +
                        rotationMatrix[10] * worldZ).toFloat()
 
-    // Only render points in front of camera (positive Z in screen space)
     if (screenZ_vec > 0) {
-        // Perspective projection: divide by depth
-        // Larger screenZ_vec = further away = smaller on screen
         val screenX = centerX + (screenX_vec / screenZ_vec) * scaleX * 50f
         val screenY = centerY - (screenY_vec / screenZ_vec) * scaleY * 50f
         return Offset(screenX, screenY)
@@ -284,16 +244,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawConstellations(
                 if (p1 != null && p2 != null) {
                     drawLine(
                         color = Color.Cyan.copy(alpha = 0.4f),
-                        start = p1,
-                        end = p2,
-                        strokeWidth = 2f
+                        start = p1, end = p2, strokeWidth = 2f
                     )
                     points.add(p1)
                     points.add(p2)
                 }
             }
         }
-        
         if (points.isNotEmpty()) {
             val avgX = points.map { it.x }.average().toFloat()
             val avgY = points.map { it.y }.average().toFloat()
