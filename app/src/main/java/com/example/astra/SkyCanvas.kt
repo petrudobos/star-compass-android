@@ -57,6 +57,7 @@ fun SkyCanvas(
         val centerX = width / 2f
         val centerY = height / 2f
         
+        // Field of view
         val fovY = 60f 
         val aspectRatio = width / height
         val fovX = fovY * aspectRatio
@@ -68,10 +69,7 @@ fun SkyCanvas(
             drawRect(color = Color.Black.copy(alpha = 0.7f))
         }
 
-        // Updated for native landscape: Draw text upright (0 rotation) or 0 rotation instead of 90.
-        // The request says rotate 90 degrees counter clockwise. 
-        // Previously it was canvas.nativeCanvas.rotate(90f, x, y) which is 90 clockwise.
-        // So 0f (upright in landscape) is technically 90 CCW from the previous state.
+        // Text drawing helper - upright in landscape
         fun drawSkyText(text: String, x: Float, y: Float, paint: Paint, offsetBelow: Float = 0f) {
             drawIntoCanvas { canvas ->
                 canvas.nativeCanvas.drawText(text, x, y + offsetBelow, paint)
@@ -173,6 +171,26 @@ fun SkyCanvas(
 
 data class ConstellationLabel(val name: String, val x: Float, val y: Float)
 
+/**
+ * Projects a celestial position (azimuth, altitude) to screen coordinates.
+ * 
+ * @param az Azimuth in degrees (0=North, 90=East, 180=South, 270=West)
+ * @param alt Altitude in degrees (0=horizon, 90=zenith)
+ * @param rotationMatrix The current device orientation matrix from OrientationManager
+ *                       (screen-to-world transformation)
+ * 
+ * Process:
+ * 1. Convert (az, alt) to world vector in horizon coordinates:
+ *    - X: East (sin(az) * cos(alt))
+ *    - Y: North (cos(az) * cos(alt))  
+ *    - Z: Up/Zenith (sin(alt))
+ * 
+ * 2. Transform world vector to screen space using rotationMatrix
+ *    Matrix multiplication gives us (screenX, screenY, screenZ)
+ * 
+ * 3. Project to 2D screen using perspective division
+ *    Only render if screenZ > 0 (in front of camera)
+ */
 fun projectToScreen(
     az: Double,
     alt: Double,
@@ -185,17 +203,37 @@ fun projectToScreen(
     val altRad = Math.toRadians(alt)
     val azRad = Math.toRadians(az)
     
-    val worldX = cos(altRad) * sin(azRad) // East
-    val worldY = sin(altRad)              // Up
-    val worldZ = cos(altRad) * cos(azRad) // North
+    // World space vector (horizon coordinates)
+    // X = East, Y = North, Z = Up
+    val worldX = sin(azRad) * cos(altRad)  // East component
+    val worldY = cos(azRad) * cos(altRad)  // North component
+    val worldZ = sin(altRad)               // Up component
 
-    val screenX_vec = rotationMatrix[0] * worldX + rotationMatrix[4] * worldY + rotationMatrix[8] * worldZ
-    val screenY_vec = rotationMatrix[1] * worldX + rotationMatrix[5] * worldY + rotationMatrix[9] * worldZ
-    val screenZ_vec = rotationMatrix[2] * worldX + rotationMatrix[6] * worldY + rotationMatrix[10] * worldZ
+    // Transform to screen space using rotation matrix
+    // rotationMatrix rows tell us where screen axes point in world
+    // Multiply: screenVec = rotationMatrix * worldVec
+    //
+    // Row 0 (indices 0,1,2): screen +X direction in world
+    val screenX_vec = (rotationMatrix[0] * worldX + 
+                       rotationMatrix[1] * worldY + 
+                       rotationMatrix[2] * worldZ).toFloat()
+    
+    // Row 1 (indices 4,5,6): screen +Y direction in world  
+    val screenY_vec = (rotationMatrix[4] * worldX + 
+                       rotationMatrix[5] * worldY + 
+                       rotationMatrix[6] * worldZ).toFloat()
+    
+    // Row 2 (indices 8,9,10): screen +Z (viewing direction) in world
+    val screenZ_vec = (rotationMatrix[8] * worldX + 
+                       rotationMatrix[9] * worldY + 
+                       rotationMatrix[10] * worldZ).toFloat()
 
+    // Only render points in front of camera (positive Z in screen space)
     if (screenZ_vec > 0) {
-        val screenX = centerX + (screenX_vec / screenZ_vec).toFloat() * scaleX * 50f
-        val screenY = centerY - (screenY_vec / screenZ_vec).toFloat() * scaleY * 50f
+        // Perspective projection: divide by depth
+        // Larger screenZ_vec = further away = smaller on screen
+        val screenX = centerX + (screenX_vec / screenZ_vec) * scaleX * 50f
+        val screenY = centerY - (screenY_vec / screenZ_vec) * scaleY * 50f
         return Offset(screenX, screenY)
     }
     return null
