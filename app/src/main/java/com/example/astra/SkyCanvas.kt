@@ -234,11 +234,11 @@ data class ConstellationLabel(val name: String, val x: Float, val y: Float)
  * World coordinate system (horizon):
  *   worldX = East  = -(sin(az) * cos(alt))   [negated to fix E/W mirror]
  *   worldY = North = -(cos(az) * cos(alt))   [negated to fix N/S swap]
- *   worldZ = Up    =   sin(alt)
+ *   worldZ = Up    = -sin(alt)               [negated to invert altitude axis]
  *
  * Screen projection:
  *   screenY uses ADDITION to make pitch match phone tilt direction.
- *   The worldY negation is what fixed the N/S compass swap.
+ *   The worldZ negation inverts the vertical axis (above ↔ below horizon).
  */
 fun projectToScreen(
     az: Double,
@@ -254,9 +254,10 @@ fun projectToScreen(
 
     // E/W already correct (worldX negated from previous fix)
     // N/S fix: negate worldY (this alone fixes the N/S swap)
+    // Altitude fix: negate worldZ (inverts vertical axis)
     val worldX = -(sin(azRad) * cos(altRad))  // East  (negated = fixes E/W mirror)
     val worldY = -(cos(azRad) * cos(altRad))  // North (negated = fixes N/S swap)
-    val worldZ =   sin(altRad)               // Up
+    val worldZ = -sin(altRad)                 // Up    (negated = inverts altitude axis)
 
     val screenX_vec = (rotationMatrix[0] * worldX + rotationMatrix[1] * worldY + rotationMatrix[2] * worldZ).toFloat()
     val screenY_vec = (rotationMatrix[4] * worldX + rotationMatrix[5] * worldY + rotationMatrix[6] * worldZ).toFloat()
