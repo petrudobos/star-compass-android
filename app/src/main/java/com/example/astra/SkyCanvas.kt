@@ -237,7 +237,8 @@ data class ConstellationLabel(val name: String, val x: Float, val y: Float)
  *   worldZ = Up    =   sin(alt)
  *
  * Screen projection:
- *   screenY now ADDS (not subtracts) to fix vertical tilt inversion.
+ *   screenY uses SUBTRACTION (standard computer graphics Y-down convention).
+ *   The worldY negation is what fixed the N/S compass swap.
  */
 fun projectToScreen(
     az: Double,
@@ -252,7 +253,7 @@ fun projectToScreen(
     val azRad  = Math.toRadians(az)
 
     // E/W already correct (worldX negated from previous fix)
-    // N/S fix: also negate worldY
+    // N/S fix: negate worldY (this alone fixes the N/S swap)
     val worldX = -(sin(azRad) * cos(altRad))  // East  (negated = fixes E/W mirror)
     val worldY = -(cos(azRad) * cos(altRad))  // North (negated = fixes N/S swap)
     val worldZ =   sin(altRad)               // Up
@@ -263,7 +264,7 @@ fun projectToScreen(
 
     if (screenZ_vec > 0) {
         val screenX = centerX + (screenX_vec / screenZ_vec) * scaleX * 50f
-        val screenY = centerY + (screenY_vec / screenZ_vec) * scaleY * 50f  // ← FIXED: changed - to +
+        val screenY = centerY - (screenY_vec / screenZ_vec) * scaleY * 50f  // ← CORRECTED: back to subtraction
         return Offset(screenX, screenY)
     }
     return null
