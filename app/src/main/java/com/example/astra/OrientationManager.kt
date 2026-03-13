@@ -1,5 +1,6 @@
 package com.example.astra
 
+import android.app.Application
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -16,10 +17,11 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class OrientationManager(
-    val context: Context,
+    application: Application,
     private val errorTracker: ErrorTracker? = null
 ) : SensorEventListener {
 
+    private val context = application.applicationContext
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
     private val geomagneticSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR)

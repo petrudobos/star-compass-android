@@ -11,7 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -22,6 +21,60 @@ import com.example.core.AstronomyUtils
 import com.example.data.Star
 import java.util.Locale
 import kotlin.math.*
+
+// ── Projection Constants ─────────────────────────────────────────────────────
+private const val FOV_Y = 60f
+private const val PROJECTION_SCALE = 50f
+
+// ── Sun Icon Constants ───────────────────────────────────────────────────────
+private const val SUN_ICON_RADIUS = 28f
+private const val SUN_GLOW_RADIUS_FACTOR = 1.8f
+private const val SUN_RAY_LENGTH_FACTOR = 0.7f
+private const val SUN_RAY_START_FACTOR = 1.15f
+private const val SUN_RAY_COUNT = 8
+private const val SUN_RAY_STROKE_WIDTH = 3f
+private const val SUN_LABEL_TEXT_SIZE = 46f
+private const val SUN_LABEL_OFFSET = 60f
+private val SUN_COLOR = Color(0xFFFFDD00)
+private val SUN_GLOW_COLOR = Color(0xFFFFDD44)
+
+// ── Moon Icon Constants ──────────────────────────────────────────────────────
+private const val MOON_ICON_RADIUS = 24f
+private const val MOON_GLOW_RADIUS_FACTOR = 1.6f
+private const val MOON_LABEL_TEXT_SIZE = 38f
+private const val MOON_LABEL_OFFSET = 56f
+private const val MOON_FULL_THRESHOLD = 0.85f
+private const val MOON_CRATER_RADIUS_FACTOR = 0.45f
+private const val MOON_CRATER_OFFSET_FACTOR = 0.2f
+private const val MOON_OUTLINE_ALPHA = 0.5f
+private const val MOON_OUTLINE_STROKE_WIDTH = 1.5f
+private val MOON_COLOR = Color(0xFFD8D8F0)
+private val MOON_DARK_COLOR = Color(0xFF0A0A1A)
+
+// ── Cardinal Direction Constants ─────────────────────────────────────────────
+private const val CARDINAL_TEXT_SIZE = 60f
+private val CARDINAL_COLOR = android.graphics.Color.RED
+
+// ── Star Constants ───────────────────────────────────────────────────────────
+private const val STAR_MIN_SIZE = 3f
+private const val STAR_MAX_SIZE = 10f
+private const val STAR_SIZE_SCALE = 1.5f
+private const val STAR_MIN_ALPHA = 0.2f
+private const val STAR_MAX_ALPHA = 1.0f
+private const val STAR_LABEL_MAGNITUDE_THRESHOLD = 4.0f
+private const val STAR_LABEL_TEXT_SIZE = 30f
+private const val STAR_LABEL_OFFSET_FACTOR = 20f
+
+// ── Constellation Constants ──────────────────────────────────────────────────
+private const val CONSTELLATION_LINE_ALPHA = 0.4f
+private const val CONSTELLATION_LINE_WIDTH = 2f
+private const val CONSTELLATION_LABEL_TEXT_SIZE = 45f
+private const val CONSTELLATION_LABEL_ALPHA = 180
+private val CONSTELLATION_COLOR = Color.Cyan
+
+// ── UI Constants ─────────────────────────────────────────────────────────────
+private const val TAP_HITBOX_PADDING = 100f
+private const val TAP_HITBOX_HEIGHT_PADDING = 50f
 
 @Composable
 fun SkyCanvas(
@@ -47,8 +100,8 @@ fun SkyCanvas(
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
                     constellationLabels.forEach { label ->
-                        if (offset.x in (label.x - 100f)..(label.x + 100f) &&
-                            offset.y in (label.y - 50f)..(label.y + 50f)
+                        if (offset.x in (label.x - TAP_HITBOX_PADDING)..(label.x + TAP_HITBOX_PADDING) &&
+                            offset.y in (label.y - TAP_HITBOX_HEIGHT_PADDING)..(label.y + TAP_HITBOX_HEIGHT_PADDING)
                         ) {
                             val lang = Locale.getDefault().language
                             val url = "https://$lang.wikipedia.org/wiki/${label.name.replace(" ", "_")}"
@@ -64,7 +117,7 @@ fun SkyCanvas(
         val centerX = width  / 2f
         val centerY = height / 2f
 
-        val fovY = 60f
+        val fovY = FOV_Y
         val aspectRatio = width / height
         val fovX = fovY * aspectRatio
         val scaleX = width  / fovX
@@ -82,16 +135,16 @@ fun SkyCanvas(
         val sunHorizon = AstronomyUtils.toHorizon(sunPos.ra, sunPos.dec, lat, lon, lst)
         val sunScreen  = projectToScreen(sunHorizon.az, sunHorizon.alt, rotationMatrix, centerX, centerY, scaleX, scaleY)
         if (sunScreen != null) {
-            drawSunIcon(sunScreen, radius = 28f)
+            drawSunIcon(sunScreen, radius = SUN_ICON_RADIUS)
             drawSkyText(
                 "SUN", sunScreen.x, sunScreen.y,
                 Paint().apply {
                     color = android.graphics.Color.YELLOW
-                    textSize = 46f
+                    textSize = SUN_LABEL_TEXT_SIZE
                     textAlign = Paint.Align.CENTER
                     typeface = Typeface.DEFAULT_BOLD
                 },
-                offsetBelow = 60f
+                offsetBelow = SUN_LABEL_OFFSET
             )
         }
 
@@ -99,16 +152,16 @@ fun SkyCanvas(
         val moonHorizon = AstronomyUtils.toHorizon(moonPos.ra, moonPos.dec, lat, lon, lst)
         val moonScreen  = projectToScreen(moonHorizon.az, moonHorizon.alt, rotationMatrix, centerX, centerY, scaleX, scaleY)
         if (moonScreen != null) {
-            drawMoonIcon(moonScreen, radius = 24f, illumination = moonIllumination)
+            drawMoonIcon(moonScreen, radius = MOON_ICON_RADIUS, illumination = moonIllumination)
             drawSkyText(
                 "MOON", moonScreen.x, moonScreen.y,
                 Paint().apply {
                     color = android.graphics.Color.argb(255, 200, 200, 220)
-                    textSize = 38f
+                    textSize = MOON_LABEL_TEXT_SIZE
                     textAlign = Paint.Align.CENTER
                     typeface = Typeface.DEFAULT_BOLD
                 },
-                offsetBelow = 56f
+                offsetBelow = MOON_LABEL_OFFSET
             )
         }
 
@@ -120,8 +173,8 @@ fun SkyCanvas(
                 drawSkyText(
                     label, screenPos.x, screenPos.y,
                     Paint().apply {
-                        color = android.graphics.Color.RED
-                        textSize = 60f
+                        color = CARDINAL_COLOR
+                        textSize = CARDINAL_TEXT_SIZE
                         textAlign = Paint.Align.CENTER
                         typeface = Typeface.DEFAULT_BOLD
                     }
@@ -134,19 +187,19 @@ fun SkyCanvas(
             val horizon   = AstronomyUtils.toHorizon(star.ra, star.dec, lat, lon, lst)
             val screenPos = projectToScreen(horizon.az, horizon.alt, rotationMatrix, centerX, centerY, scaleX, scaleY)
             if (screenPos != null) {
-                val starSize  = max(3f, 10f - star.magnitude * 1.5f)
-                val starAlpha = (1.0f - (star.magnitude / 6.0f)).coerceIn(0.2f, 1.0f)
+                val starSize  = max(STAR_MIN_SIZE, STAR_MAX_SIZE - star.magnitude * STAR_SIZE_SCALE)
+                val starAlpha = (1.0f - (star.magnitude / 6.0f)).coerceIn(STAR_MIN_ALPHA, STAR_MAX_ALPHA)
                 drawCircle(color = Color.White.copy(alpha = starAlpha), radius = starSize, center = screenPos)
-                if (star.magnitude < 4.0f && star.commonName != null) {
+                if (star.magnitude < STAR_LABEL_MAGNITUDE_THRESHOLD && star.commonName != null) {
                     drawSkyText(
                         star.commonName!!, screenPos.x, screenPos.y,
                         Paint().apply {
                             color = android.graphics.Color.WHITE
-                            textSize = 30f
+                            textSize = STAR_LABEL_TEXT_SIZE
                             textAlign = Paint.Align.CENTER
                             alpha = (starAlpha * 255).toInt()
                         },
-                        offsetBelow = starSize + 20f
+                        offsetBelow = starSize + STAR_LABEL_OFFSET_FACTOR
                     )
                 }
             }
@@ -160,10 +213,10 @@ fun SkyCanvas(
                 name.uppercase(), x, y,
                 Paint().apply {
                     color = android.graphics.Color.CYAN
-                    textSize = 45f
+                    textSize = CONSTELLATION_LABEL_TEXT_SIZE
                     textAlign = Paint.Align.CENTER
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
-                    alpha = 180
+                    alpha = CONSTELLATION_LABEL_ALPHA
                 }
             )
         }
@@ -173,55 +226,52 @@ fun SkyCanvas(
 // ── Sun icon: filled yellow disc + radiating spikes ──────────────────────────
 private fun DrawScope.drawSunIcon(center: Offset, radius: Float) {
     // Glow
-    drawCircle(color = Color(0xFFFFDD44).copy(alpha = 0.25f), radius = radius * 1.8f, center = center)
+    drawCircle(color = SUN_GLOW_COLOR.copy(alpha = 0.25f), radius = radius * SUN_GLOW_RADIUS_FACTOR, center = center)
     // Disc
-    drawCircle(color = Color(0xFFFFDD00), radius = radius, center = center)
+    drawCircle(color = SUN_COLOR, radius = radius, center = center)
     // Rays
-    val rayLen  = radius * 0.7f
-    val rayStart = radius * 1.15f
-    val strokePaint = Stroke(width = 3f)
-    for (i in 0 until 8) {
+    val rayLen  = radius * SUN_RAY_LENGTH_FACTOR
+    val rayStart = radius * SUN_RAY_START_FACTOR
+    for (i in 0 until SUN_RAY_COUNT) {
         val angle = Math.toRadians(i * 45.0)
         val sx = center.x + (rayStart * cos(angle)).toFloat()
         val sy = center.y + (rayStart * sin(angle)).toFloat()
         val ex = center.x + ((rayStart + rayLen) * cos(angle)).toFloat()
         val ey = center.y + ((rayStart + rayLen) * sin(angle)).toFloat()
-        drawLine(color = Color(0xFFFFDD00), start = Offset(sx, sy), end = Offset(ex, ey), strokeWidth = 3f)
+        drawLine(color = SUN_COLOR, start = Offset(sx, sy), end = Offset(ex, ey), strokeWidth = SUN_RAY_STROKE_WIDTH)
     }
 }
 
 // ── Moon icon: crescent shape using two overlapping circles ──────────────────
 // illumination: 0.0 = new moon (dark), 1.0 = full moon (bright)
 private fun DrawScope.drawMoonIcon(center: Offset, radius: Float, illumination: Float) {
-    val moonColor = Color(0xFFD8D8F0)
-
     // Soft glow
-    drawCircle(color = moonColor.copy(alpha = 0.15f * illumination), radius = radius * 1.6f, center = center)
+    drawCircle(color = MOON_COLOR.copy(alpha = 0.15f * illumination), radius = radius * MOON_GLOW_RADIUS_FACTOR, center = center)
 
-    if (illumination > 0.85f) {
+    if (illumination > MOON_FULL_THRESHOLD) {
         // Full moon: solid bright disc
-        drawCircle(color = moonColor, radius = radius, center = center)
+        drawCircle(color = MOON_COLOR, radius = radius, center = center)
         // Subtle crater-like ring
-        drawCircle(color = Color.Black.copy(alpha = 0.08f), radius = radius * 0.45f,
-            center = Offset(center.x - radius * 0.2f, center.y - radius * 0.2f))
+        drawCircle(color = Color.Black.copy(alpha = 0.08f), radius = radius * MOON_CRATER_RADIUS_FACTOR,
+            center = Offset(center.x - radius * MOON_CRATER_OFFSET_FACTOR, center.y - radius * MOON_CRATER_OFFSET_FACTOR))
     } else {
         // Crescent: outer disc clipped by inner dark disc offset to one side
         // Draw outer (bright) circle
-        drawCircle(color = moonColor.copy(alpha = 0.9f), radius = radius, center = center)
+        drawCircle(color = MOON_COLOR.copy(alpha = 0.9f), radius = radius, center = center)
         // Overlay dark circle shifted to simulate shadow
         // Shadow offset: shifts more as illumination decreases
         val shadowShift = radius * (1f - illumination) * 1.4f
         drawCircle(
-            color = Color(0xFF0A0A1A),  // near-black to match sky background
+            color = MOON_DARK_COLOR,  // near-black to match sky background
             radius = radius * 1.05f,
             center = Offset(center.x + shadowShift, center.y)
         )
         // Thin outline to keep crescent visible against bright backgrounds
         drawCircle(
-            color = moonColor.copy(alpha = 0.5f),
+            color = MOON_COLOR.copy(alpha = MOON_OUTLINE_ALPHA),
             radius = radius,
             center = center,
-            style = Stroke(width = 1.5f)
+            style = Stroke(width = MOON_OUTLINE_STROKE_WIDTH)
         )
     }
 }
@@ -264,8 +314,8 @@ fun projectToScreen(
     val screenZ_vec = (rotationMatrix[8] * worldX + rotationMatrix[9] * worldY + rotationMatrix[10] * worldZ).toFloat()
 
     if (screenZ_vec > 0) {
-        val screenX = centerX + (screenX_vec / screenZ_vec) * scaleX * 50f
-        val screenY = centerY + (screenY_vec / screenZ_vec) * scaleY * 50f  // ← FIXED: addition makes pitch match tilt
+        val screenX = centerX + (screenX_vec / screenZ_vec) * scaleX * PROJECTION_SCALE
+        val screenY = centerY + (screenY_vec / screenZ_vec) * scaleY * PROJECTION_SCALE  // ← FIXED: addition makes pitch match tilt
         return Offset(screenX, screenY)
     }
     return null
@@ -314,7 +364,7 @@ private fun DrawScope.drawConstellations(
                 val p1 = projectToScreen(h1.az, h1.alt, rotationMatrix, centerX, centerY, scaleX, scaleY)
                 val p2 = projectToScreen(h2.az, h2.alt, rotationMatrix, centerX, centerY, scaleX, scaleY)
                 if (p1 != null && p2 != null) {
-                    drawLine(color = Color.Cyan.copy(alpha = 0.4f), start = p1, end = p2, strokeWidth = 2f)
+                    drawLine(color = CONSTELLATION_COLOR.copy(alpha = CONSTELLATION_LINE_ALPHA), start = p1, end = p2, strokeWidth = CONSTELLATION_LINE_WIDTH)
                     points.add(p1); points.add(p2)
                 }
             }

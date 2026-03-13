@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        orientationManager = OrientationManager(this, errorTracker)
+        orientationManager = OrientationManager(application, errorTracker)
         locationManager = LocationManager(this, errorTracker)
         starRepository = StarRepository(this)
 

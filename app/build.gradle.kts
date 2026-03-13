@@ -28,7 +28,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
     buildFeatures {
-        viewBinding = true
         compose = true
     }
 }
@@ -38,14 +37,8 @@ dependencies {
     implementation(project(":data"))
 
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
     implementation(libs.material)
-    implementation(libs.androidx.constraintlayout)
-    implementation(libs.androidx.lifecycle.livedata.ktx)
-    implementation(libs.androidx.lifecycle.viewmodel.ktx)
-    implementation(libs.androidx.navigation.fragment.ktx)
-    implementation(libs.androidx.navigation.ui.ktx)
-    
+
     // Compose
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

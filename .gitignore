@@ -47,3 +47,6 @@ Thumbs.db
 *.class
 bin/
 gen/
+
+.qwen/
+gha-creds-*.json
