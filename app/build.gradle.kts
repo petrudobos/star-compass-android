@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.astra"
+    namespace = "com.example.star_compass"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.astra"
+        applicationId = "com.example.star_compass"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
